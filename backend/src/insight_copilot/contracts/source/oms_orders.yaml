@@ -1,0 +1,59 @@
+# I1 - full fidelity. The highest-quality feed we have, and still not clean: the
+# midnight cut-off puts some orders on the wrong side of a day boundary, and the
+# export occasionally runs twice.
+source_id: oms_orders
+system: "Order management (Shopify-plus-ERP style), nightly export from a read replica"
+owner: analytics-eng
+transport: db_replica
+format: parquet
+landing_path: "landing/oms_orders/dt={date}/"
+build_tier: full
+quality_tier: high
+
+arrival:
+  cron: "0 2 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 25
+  failure_probability: 0.01
+latency_sla_hours: 6
+
+covers:
+  grain: [order_date, product_sku, region, channel]
+  period: previous_day
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 3
+  columns:
+    order_date: {type: date, pk: true}
+    order_id: {type: string, pk: true}
+    product_sku: {type: string, pk: true}
+    region: {type: string, pk: true, allowed: [North, West, South, East, Central, UNKNOWN]}
+    channel: {type: string, pk: true, allowed: [d2c_web, quick_commerce, marketplace, modern_trade]}
+    customer_segment: {type: string, allowed: [new, repeat, subscription, UNKNOWN]}
+    units: {type: integer, min: 0, max: 500000}
+    unit_price_net: {type: decimal, min: 0, max: 500000, null_frac_max: 0.0}
+    list_price: {type: decimal, min: 0, max: 500000}
+    returns_value: {type: decimal, min: 0, max: 50000000}
+    cancelled_units: {type: integer, min: 0}
+    ordered_at_ts: {type: timestamp}
+  drift_policy: quarantine_and_alert
+
+watermark: order_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 200
+  row_count_max: 40000
+  comparisons:
+    - "cancelled_units <= units"
+    - "unit_price_net <= list_price"
+  max_frac_violating: {negative_price: 0.0, unknown_region: 0.02}
+
+reconciliation:
+  - {against: wms_fulfilment, measure: units, tolerance_pct: 2.0, window: day, on_breach: warn}
+
+history_available_months: 36
+known_issues: [midnight_cutoff, duplicate_export_day, cancellations_post_date_orders]
+classification: internal_financial

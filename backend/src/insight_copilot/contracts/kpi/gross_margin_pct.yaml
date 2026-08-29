@@ -1,0 +1,99 @@
+# The masked-measure demonstration. Everything about this KPI is ordinary except its
+# access block: the RSM sees rows for their region but the measure itself comes back
+# as a MASKED sentinel, and the narrator renders that as a policy statement rather
+# than a number. Row-, column- and domain-level control from one policy block.
+contract_version: "1.0.1"
+
+kpi:
+  id: gross_margin_pct
+  name: "Gross Margin %"
+  tier: 2
+  business_owner: "CFO Office"
+  data_steward: "analytics-eng"
+  description: >
+    Gross margin as a percentage of net revenue, at SKU and region grain. Standard
+    cost comes from the product master, so a late PIM update shows up here as an
+    UNKNOWN cost bucket rather than as a silently wrong margin.
+
+definition:
+  base_grain: [date, product_sku, region]
+  default_reporting_grain: [date]
+  dimensions: [date, iso_week, product_sku, category, region, channel]
+  calendar: fiscal_apr_mar
+  unit: percent
+  aggregation: weighted
+  ratio_of: {numerator: gross_profit_inr, denominator: net_revenue_inr}
+  null_policy: "missing standard cost -> row excluded and counted as coverage loss; never treated as zero cost"
+
+calculation:
+  measure_sql: "100.0 * SUM(units * (unit_price_net - unit_cost)) / NULLIF(SUM(units * unit_price_net), 0)"
+  source_view: gold.fct_revenue_daily
+  derived_submetrics:
+    gross_profit_inr: "SUM(units * (unit_price_net - unit_cost))"
+    net_revenue_inr: "SUM(units * unit_price_net)"
+    cost_coverage_pct: "100.0 * AVG(CASE WHEN unit_cost IS NULL THEN 0.0 ELSE 1.0 END)"
+
+sources:
+  - {source_id: oms_orders, role: primary, required: true}
+  - {source_id: pim_products, role: primary, required: true}
+
+lineage:
+  - {step: land, from: oms_orders.order_lines, to: bronze.oms_order_lines, transform: ingest/bronze.py}
+  - {step: land, from: pim_products.product_master, to: bronze.pim_products, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.oms_order_lines, to: silver.sales_conformed, transform: ingest/silver.py}
+  - {step: mart, from: silver.sales_conformed, to: gold.fct_revenue_daily, transform: ingest/gold.py}
+
+drivers:
+  identity:
+    - {id: gross_profit_inr, role: numerator}
+    - {id: net_revenue_inr, role: denominator}
+    - {id: mix, role: mix, over: [product_sku, category]}
+  exogenous:
+    - {id: price_index, direction: positive, lag_days: [0, 3], controllable: true, lever: pricing}
+    - {id: input_cost_index, direction: negative, lag_days: [0, 30], controllable: false}
+    - {id: discount_depth, direction: negative, lag_days: [0, 3], controllable: true, lever: promo}
+  downstream_of: [net_revenue]
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.01
+    fdr_q: 0.05
+    shift_persistence_days: 3
+  business:
+    min_abs_move_pp: 1.5
+
+confidence_policy:
+  min_history_days_full_stats: 28
+  abstain_below: 0.50
+  hedge_below: 0.75
+  hard_gates: {any_signal_min: 0.30, required_sources_fresh: true}
+
+access:
+  classification: internal_financial
+  roles:
+    cfo: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    rsm_north:
+      rows: "region = :user_region"
+      columns: {mask: [gross_margin_pct, gross_profit_inr, net_revenue_inr]}
+      national_headline: summary_only
+    marketing_lead:
+      rows: all
+      columns: {mask: [gross_profit_inr]}
+    intern:
+      deny: true
+      reason: "Margin data is restricted - request access from the data steward (analytics-eng)."
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_revenue.yaml
+
+monitoring:
+  freshness_sla_hours: 30
+  drift_checks: {input_psi_monthly: 0.2}
+
+sparse_history_policy:
+  method: hierarchical_pool
+  pool_by: [category]
+  guardrail_only_below_n: 28
+  graduation: {full_stats_n: 28}

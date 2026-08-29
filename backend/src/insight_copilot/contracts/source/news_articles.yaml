@@ -1,0 +1,51 @@
+# E5 - corpus only. Documents, not a table. Syndication is the point: one press
+# release across six outlets must collapse to ONE signal at ingestion, or noisy-OR
+# corroboration treats it as six independent confirmations and inflates confidence.
+source_id: news_articles
+system: "News / PR feed (RSS + news aggregator), pre-indexed corpus"
+owner: comms
+transport: file_watch
+format: jsonl
+landing_path: "landing/news_articles/dt={date}/"
+build_tier: corpus_only
+quality_tier: medium_low
+
+arrival:
+  cron: "0 7 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 45
+  failure_probability: 0.02
+latency_sla_hours: 48
+
+covers:
+  grain: [doc_id]
+  period: continuous
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 1
+  columns:
+    doc_id: {type: string, pk: true}
+    outlet: {type: string}
+    headline: {type: string}
+    body_text: {type: string}
+    publish_date: {type: date}
+    effective_date: {type: date, description: "Materially later than publish_date in ~20% of documents."}
+    entities: {type: string}
+    source_tier: {type: integer, min: 1, max: 4}
+    syndication_group: {type: string, description: "Shared by every copy of one story; the dedup key."}
+  drift_policy: accept_and_flag
+
+watermark: publish_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 0
+  row_count_max: 200
+
+reconciliation: []
+
+history_available_months: 24
+known_issues: [syndication_duplicates, publish_date_not_effective_date, post_dated_decoys]
+classification: external_public

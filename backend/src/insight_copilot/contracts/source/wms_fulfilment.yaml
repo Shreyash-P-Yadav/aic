@@ -1,0 +1,54 @@
+# I2 - full fidelity. Vendor-hosted, so the extract job fails silently some nights
+# and there is no backfill unless someone asks. T+2 by design, occasionally T+3.
+source_id: wms_fulfilment
+system: "Warehouse management (vendor-hosted), nightly flat-file extract"
+owner: supply-analytics
+transport: sftp_drop
+format: parquet
+landing_path: "landing/wms_fulfilment/dt={date}/"
+build_tier: full
+quality_tier: medium
+
+arrival:
+  cron: "0 5 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 90
+  failure_probability: 0.04
+latency_sla_hours: 72
+
+covers:
+  grain: [ship_date, warehouse, product_sku]
+  period: t_minus_2
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 2
+  columns:
+    ship_date: {type: date, pk: true}
+    warehouse: {type: string, pk: true, allowed: [DC-North, DC-West, DC-South, DC-East]}
+    product_sku: {type: string, pk: true}
+    units_ordered: {type: integer, min: 0, max: 500000}
+    units_shipped_ok: {type: integer, min: 0, max: 500000}
+    units_short: {type: integer, min: 0}
+    inbound_delay_days: {type: integer, min: 0, max: 90}
+    supplier_name: {type: string, pii: false, description: "Commercially sensitive; masked for junior roles."}
+    extracted_at_ts: {type: timestamp}
+  drift_policy: quarantine_and_alert
+
+watermark: ship_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 100
+  row_count_max: 20000
+  comparisons:
+    - "units_shipped_ok <= units_ordered"
+  max_frac_violating: {fill_rate_above_one: 0.0}
+
+reconciliation:
+  - {against: oms_orders, measure: units_ordered, tolerance_pct: 2.0, window: day, on_breach: warn}
+
+history_available_months: 24
+known_issues: [silent_gap_days, t_plus_three_slippage, no_backfill]
+classification: internal_operations

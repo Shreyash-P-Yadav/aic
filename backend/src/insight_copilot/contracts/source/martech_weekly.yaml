@@ -1,0 +1,61 @@
+# I3 - full fidelity, and the source that carries Scenario B. Restates for 14 days,
+# keeps only 12 months, reuses campaign ids across years, and changed its spend unit
+# from paise to rupees in Feb 2025 without telling anyone.
+source_id: martech_weekly
+system: "Ad platform aggregator (agency-managed export)"
+owner: marketing-analytics
+transport: sftp_drop
+format: parquet
+landing_path: "landing/martech_weekly/week={iso_week}/"
+build_tier: full
+quality_tier: medium_low
+
+arrival:
+  cron: "0 6 * * 1"
+  tz: Asia/Kolkata
+  jitter_minutes: 40
+  failure_probability: 0.02
+latency_sla_hours: 8
+
+covers:
+  grain: [iso_week, campaign_id, channel]
+  period: previous_iso_week
+
+restatement:
+  expected: true
+  window_days: 14
+  policy: supersede_by_batch
+
+schema:
+  version: 2
+  columns:
+    iso_week: {type: string, pk: true}
+    campaign_id: {type: string, pk: true}
+    channel: {type: string, pk: true, allowed: [paid_social, search, display, affiliate, influencer, ctv]}
+    region: {type: string, allowed: [North, West, South, East, Central, ALL]}
+    spend_inr: {type: decimal, min: 0, max: 50000000, null_frac_max: 0.0}
+    impressions: {type: bigint, min: 0}
+    clicks: {type: bigint, min: 0}
+    attributed_revenue_inr: {type: decimal, min: 0, null_frac_max: 0.02}
+  drift_policy: quarantine_and_alert
+
+watermark: iso_week
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 200
+  row_count_max: 2000
+  comparisons:
+    - "clicks <= impressions"
+  max_frac_violating: {spend_zero_with_positive_clicks: 0.01}
+
+reconciliation:
+  - against: oms_orders
+    measure: attributed_revenue_inr
+    tolerance_pct: 5.0
+    window: iso_week
+    on_breach: block_attribution
+
+history_available_months: 12
+known_issues: [missed_week, attribution_lag, campaign_id_reuse, currency_unit_change_2025_02]
+classification: internal_marketing

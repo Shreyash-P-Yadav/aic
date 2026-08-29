@@ -1,0 +1,47 @@
+# E3 - lightweight. Gridded to a region centroid, which is a real approximation: a
+# region-level temperature is not what any individual customer experienced.
+source_id: weather_daily
+system: "Commercial weather API, region centroid"
+owner: analytics-eng
+transport: api_pull
+format: json
+landing_path: "landing/weather_daily/dt={date}/"
+build_tier: lightweight
+quality_tier: high
+
+arrival:
+  cron: "0 1 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 10
+  failure_probability: 0.01
+latency_sla_hours: 12
+
+covers:
+  grain: [observation_date, region]
+  period: previous_day
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 1
+  columns:
+    observation_date: {type: date, pk: true}
+    region: {type: string, pk: true, allowed: [North, West, South, East, Central]}
+    temp_max_c: {type: decimal, min: -10, max: 55}
+    rainfall_mm: {type: decimal, min: 0, max: 600}
+    humidity_pct: {type: decimal, min: 0, max: 100}
+    monsoon_active: {type: boolean}
+  drift_policy: accept_and_flag
+
+watermark: observation_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 5
+  row_count_max: 5
+
+reconciliation: []
+
+history_available_months: 36
+known_issues: [centroid_approximation]
+classification: external_public

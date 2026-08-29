@@ -12,6 +12,8 @@ import sys
 from collections.abc import Callable, Sequence
 
 from insight_copilot.config import get_settings
+from insight_copilot.contracts.registry import ContractRegistry
+from insight_copilot.errors import ContractError
 from insight_copilot.logging import get_logger
 
 logger = get_logger(__name__)
@@ -39,9 +41,31 @@ def _cmd_info(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_validate_contracts(_: argparse.Namespace) -> int:
+    """Load and cross-check every contract, reporting all problems in one pass."""
+    cfg = get_settings()
+    try:
+        registry = ContractRegistry.from_directory(cfg.contracts_dir)
+    except ContractError as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+    print(f"OK    {len(registry.kpi_ids)} KPI contracts:    {', '.join(registry.kpi_ids)}")
+    print(f"OK    {len(registry.source_ids)} source contracts: {', '.join(registry.source_ids)}")
+    for kpi_id in registry.kpi_ids:
+        contract = registry.kpi(kpi_id)
+        roles = ", ".join(
+            f"{name}{'(deny)' if policy.deny else ''}"
+            for name, policy in sorted(contract.access.roles.items())
+        )
+        print(f"      {kpi_id} v{contract.contract_version} — roles: {roles}")
+    return 0
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
-    "validate-contracts": _not_yet("P1"),
+    "validate-contracts": _cmd_validate_contracts,
     "generate": _not_yet("P2"),
     "backfill": _not_yet("P5"),
     "run": _not_yet("P6"),

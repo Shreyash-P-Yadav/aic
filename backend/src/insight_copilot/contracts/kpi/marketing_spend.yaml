@@ -1,0 +1,104 @@
+# Weekly, restated, and the shortest history of any KPI here (12 months, because
+# the aggregator's retention window caps it). That is a real analytical constraint,
+# not a defect: any model using this driver has a shorter usable window.
+contract_version: "1.1.0"
+
+kpi:
+  id: marketing_spend
+  name: "Marketing Spend"
+  tier: 2
+  business_owner: "CMO Office"
+  data_steward: "marketing-analytics"
+  description: >
+    Media spend rolled up by the agency's platform aggregator, by ISO week, campaign
+    and channel. Restated for 14 days after each drop as platform attribution settles.
+
+definition:
+  base_grain: [iso_week, campaign_id, channel]
+  default_reporting_grain: [iso_week]
+  dimensions: [iso_week, campaign_id, channel, region]
+  calendar: iso_week
+  unit: INR
+  aggregation: sum
+  null_policy: "missing week -> KPI undefined for that week; never imputed silently; DQ flag"
+
+calculation:
+  measure_sql: "SUM(spend_inr)"
+  source_view: gold.fct_marketing_weekly
+  derived_submetrics:
+    impressions: "SUM(impressions)"
+    clicks: "SUM(clicks)"
+    cpm_index: "1000.0 * SUM(spend_inr) / NULLIF(SUM(impressions), 0)"
+    attributed_revenue: "SUM(attributed_revenue_inr)"
+
+sources:
+  - {source_id: martech_weekly, role: primary, required: true}
+
+lineage:
+  - {step: land, from: martech_weekly.weekly_drop, to: bronze.martech_weekly, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.martech_weekly, to: silver.spend_conformed, transform: ingest/silver.py}
+  - {step: mart, from: silver.spend_conformed, to: gold.fct_marketing_weekly, transform: ingest/gold.py}
+
+drivers:
+  identity:
+    - {id: channel_spend, role: quantity}
+    - {id: channel_mix, role: mix, over: [channel]}
+  exogenous:
+    # Spend is ENDOGENOUS: the quarterly plan is exogenous, but the tactical overlay
+    # responds to last week's revenue against target. This is the confounding that
+    # makes a naive marketing elasticity biased upward, and it is planted on purpose.
+    - id: planned_quarterly_budget
+      direction: positive
+      lag_days: [0, 0]
+      controllable: true
+      lever: media_budget
+    - id: prior_week_revenue_vs_target
+      kpi_ref: net_revenue
+      direction: positive
+      lag_days: [7, 14]
+      controllable: false
+    - {id: seasonal_media_multiplier, direction: contextual, lag_days: [0, 0]}
+  feeds:
+    - {kpi_ref: net_revenue, lag_days: [0, 21]}
+    - {kpi_ref: unit_volume, lag_days: [0, 21]}
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.025
+    fdr_q: 0.05
+    shift_persistence_days: 14
+  business:
+    min_pct_move: 15.0
+    min_spend_at_risk_inr: 500000
+
+confidence_policy:
+  min_history_days_full_stats: 84       # 12 ISO weeks
+  abstain_below: 0.50
+  hedge_below: 0.75
+  hard_gates:
+    any_signal_min: 0.30
+    required_sources_fresh: true
+    no_open_restatement_on_flagged_periods: true
+
+access:
+  classification: internal_marketing
+  roles:
+    cfo: {rows: all, columns: all}
+    marketing_lead: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    rsm_north: {deny: true, reason: "Marketing domain entitlement required."}
+    intern: {deny: true, reason: "Marketing domain entitlement required."}
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_marketing.yaml
+
+monitoring:
+  freshness_sla_hours: 56
+  drift_checks: {input_psi_monthly: 0.25}
+
+sparse_history_policy:
+  method: channel_pool
+  pool_by: [channel]
+  guardrail_only_below_n: 8
+  graduation: {full_stats_n: 12}

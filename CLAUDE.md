@@ -10,7 +10,8 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P1 — Contracts, security, audit.** State of every phase: `BUILD_PROGRESS.md`.
+**P2 — Data generation: world, latent process, decisions, outcomes.**
+P0 and P1 are DONE. State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
 

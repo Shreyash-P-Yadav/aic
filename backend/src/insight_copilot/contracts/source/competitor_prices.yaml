@@ -1,0 +1,51 @@
+# E1 - full fidelity, and the source that makes entity-link confidence a real number
+# rather than a slide. Roughly 60% SKU coverage, fuzzy matching at ~85%, and only
+# 14 months of history because that is when we started paying for it.
+source_id: competitor_prices
+system: "Paid competitor price panel (scraping vendor)"
+owner: category-management
+transport: api_pull
+format: parquet
+landing_path: "landing/competitor_prices/week={iso_week}/"
+build_tier: full
+quality_tier: medium_low
+
+arrival:
+  cron: "0 9 * * 4"
+  tz: Asia/Kolkata
+  jitter_minutes: 120
+  failure_probability: 0.05
+latency_sla_hours: 96
+
+covers:
+  grain: [iso_week, competitor, matched_sku]
+  period: previous_iso_week
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 1
+  columns:
+    iso_week: {type: string, pk: true}
+    competitor: {type: string, pk: true}
+    matched_sku: {type: string, pk: true}
+    competitor_product_title: {type: string}
+    match_confidence: {type: decimal, min: 0.0, max: 1.0, null_frac_max: 0.0}
+    observed_price_inr: {type: decimal, min: 0, max: 500000}
+    region: {type: string}
+    scraped_at_ts: {type: timestamp}
+  drift_policy: accept_and_flag
+
+watermark: iso_week
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 50
+  row_count_max: 6000
+  max_frac_violating: {low_match_confidence: 0.20, delisted_gap: 0.15}
+
+reconciliation: []
+
+history_available_months: 14
+known_issues: [partial_sku_coverage, fuzzy_match_error, silent_delisting_gaps, scrape_timing]
+classification: external_licensed

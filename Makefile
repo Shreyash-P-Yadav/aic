@@ -108,7 +108,8 @@ verify-p0:  ## P0 gate: lint, typecheck, health endpoint, frontend build
 	$(PYTEST) tests/unit/test_p0_bootstrap.py
 	$(MAKE) build
 
-verify-p1:
+verify-p1:  ## P1 gate: contracts validate; compiler entitlements and audit hold
+	$(MAKE) validate-contracts
 	$(PYTEST) tests/unit/test_contracts.py tests/unit/test_compiler.py
 
 verify-p2:
