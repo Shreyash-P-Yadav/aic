@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P9 — API.** P0–P8 are DONE.
+**P10 — Frontend.** P0–P9 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -73,7 +73,8 @@ backend/src/insight_copilot/
               templates router feedback personas/*.yaml
   learning/   feedback ranker calibrate case_library
   telemetry/  meter ledger
-  api/        app.py routers/ schemas.py errors.py ws.py
+  api/        app.py state.py deps.py schemas.py errors.py
+              routers/ health session insights operations ask
 frontend/                 Vite React TS app
 tests/                    unit/ integration/ statistical/ e2e/ fixtures/
 data/                     generated, gitignored (warehouse, landing, ledger)

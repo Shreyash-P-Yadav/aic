@@ -45,6 +45,18 @@ class EntitlementError(InsightCopilotError):
         self.role = role
 
 
+class ResourceNotFound(InsightCopilotError):
+    """A named object does not exist. Distinct from a malformed request."""
+
+
+class ServiceUnavailable(InsightCopilotError):
+    """A dependency the caller needs has not been started or loaded yet.
+
+    A cold start — an API up before the first backfill — is a documented state of this
+    system, not an internal error, and it must not look like one to a client.
+    """
+
+
 class DataQualityError(InsightCopilotError):
     """A data-quality expectation failed hard enough to stop a load."""
 

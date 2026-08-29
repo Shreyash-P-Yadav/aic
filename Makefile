@@ -143,7 +143,7 @@ verify-p8:
 	$(PYTEST) tests/unit/test_p8_llm.py
 
 verify-p9:
-	$(PYTEST) tests/integration/api
+	$(PYTEST) tests/integration/test_p9_api.py
 
 verify-p10:
 	cd $(FRONTEND) && npm run build && npm run test && npm run e2e

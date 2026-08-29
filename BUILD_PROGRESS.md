@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T22:30:00Z
-Current phase: P9
+Updated: 2026-08-29T23:20:00Z
+Current phase: P10
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -13,7 +13,7 @@ Current phase: P9
 | P6 | Engine: detection + attribution ladder | DONE | `make verify-p6` | PASS | 23 tests; **conformal p-values uniform on clean holdout (KS p = 0.716)**; only period 7 confirmed; outage detected 2026-03-06 at p = 0.0039; scenario week -14.03% against a -11.94% counterfactual truth; Adtributor puts `region=North` at rank 1 with bootstrap stability 0.96; Bennet residual 3.4e-08; price elasticity -1.63 against a planted -1.94 (15.9%); marketing elasticity not recovered — see Known issues |
 | P7 | Evidence, confidence, actions | DONE | `make verify-p7` | PASS | 17 tests in 50s; four separate abstention paths (stale feed, reconciliation breach, evidence floor, weak signal); post-dated decoy eliminated by the timing gate; six syndicated copies count as one independent source; Scenario C names `n = 18 against a 28-day floor`; expected impacts carry their interval; actions suppressed below Moderate |
 | P8 | LLM layer and verifiers | DONE | `make verify-p8` | PASS | 31 tests in 0.34s with **no API key and no network**; an injected wrong number is caught and the narrator falls back to templates after two regenerations; uncited hypotheses dropped; a plan naming an undeclared dimension rejected; four persona style cards; cache hit on the second call; cost cap downshifts and logs it |
-| P9 | API | PENDING | `make verify-p9` | — | |
+| P9 | API | DONE | `make verify-p9` | PASS | 25 tests in 4.5s; every response a pydantic model so the OpenAPI schema is the frontend's contract; role switching exercised through HTTP; abstentions are first-class list rows; a cold start returns 503 with the command to fix it, not a 500 |
 | P10 | Frontend | PENDING | `make verify-p10` | — | |
 | P11 | Calibration backtest, learning, evals | PENDING | `make verify-p11` | — | |
 | P12 | Seed, document, harden, verify | PENDING | `make verify-p12` | — | |
@@ -315,7 +315,16 @@ Current phase: P9
 
 ## Phase plans
 
-### P9 plan (next)
+### P10 plan (next)
+
+1. `frontend/src/` — the nine screens over the typed API: insight feed, insight card
+   with the evidence drawer, landing-zone monitor, DQ dashboard, admin panel with the
+   four demo controls, telemetry, calibration, audit, and the conversational view.
+2. Persona switching in the UI that calls `POST /api/session/role`, so what changes is
+   the data.
+3. `tests/e2e/` — Playwright, plus the screenshots the submission needs.
+
+### P9 plan (done)
 
 1. `api/routers/` — the routes in the build prompt, every response a pydantic model.
 2. Session role switching that actually changes the data: the compiler's row filters and

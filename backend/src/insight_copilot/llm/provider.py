@@ -139,6 +139,14 @@ class MockProvider(LLMProvider):
     @staticmethod
     def _default(request: LLMRequest) -> str:
         """The deterministic output for a call site with nothing canned."""
+        if request.call_site == "classify_feedback":
+            # Classify by the same rules the offline classifier uses. A mock that
+            # returned one fixed label whatever the text would make every feedback
+            # test pass by accident.
+            from insight_copilot.llm.feedback import _by_rules
+
+            label, reason = _by_rules(request.user)
+            return json.dumps({"label": label, "reason": reason})
         if request.call_site == "narrate":
             try:
                 draft = str(json.loads(request.user).get("draft", "")).strip()

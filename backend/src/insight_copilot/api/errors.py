@@ -13,6 +13,8 @@ from insight_copilot.errors import (
     InsightCopilotError,
     InsufficientEvidenceError,
     LLMError,
+    ResourceNotFound,
+    ServiceUnavailable,
 )
 from insight_copilot.logging import get_logger
 
@@ -20,6 +22,8 @@ logger = get_logger(__name__)
 
 _STATUS_BY_TYPE: dict[type[InsightCopilotError], int] = {
     EntitlementError: 403,
+    ResourceNotFound: 404,
+    ServiceUnavailable: 503,
     ContractError: 422,
     DataQualityError: 409,
     InsufficientEvidenceError: 200,

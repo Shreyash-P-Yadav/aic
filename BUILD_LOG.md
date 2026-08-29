@@ -1113,3 +1113,43 @@ verify.numbers  found=8  unsupported=0        <- the template fallback, verified
 Three model attempts, three rejections, then the template — which cannot produce an
 unsupported number because it only interpolates facts. **A sentence containing an
 unsupported number never reaches a human.**
+
+---
+
+## P9 — API
+
+**Gate:** `make verify-p9` — 2026-08-29.
+
+```
+.venv/bin/pytest tests/integration/test_p9_api.py
+.........................                                                [100%]
+25 passed in 4.46s
+```
+
+`make lint` and `mypy --strict` clean (159 source files).
+
+Routes: health, session (roles, get, switch), insights (list with status/kpi filters,
+bundle, per-persona narrative, evidence drawer, feedback), ask, sources, batches,
+freshness, dq, telemetry, calibration, audit, and the two demo controls. Every response
+is a pydantic model, so the generated OpenAPI schema is the frontend's contract and a
+renamed field breaks the TypeScript build rather than a demo.
+
+### What the gate caught
+
+1. **A cold start returned 500.** `/api/freshness` before any backfill raised
+   `WarehouseUnavailable`, which fell through to the catch-all and looked like an
+   internal error. An API up before its first load is a *documented state* of this
+   system. Added `ServiceUnavailable` (503) and `ResourceNotFound` (404) to the typed
+   hierarchy; a missing insight was previously a 422.
+2. **The mock classified every reaction as "useful".** The feedback mock returned one
+   fixed label whatever the text, so every feedback test passed by accident. It now
+   applies the same rules the offline classifier uses.
+
+### Verified through HTTP, not just in the compiler
+
+`test_roles_are_listed_with_their_row_filter_bindings` and
+`test_switching_role_changes_the_session` exercise the entitlement path end to end. The
+RSM's `user_region = North` binding is what the compiler substitutes into the contract's
+row-filter template, so switching role through the API changes what the next query
+returns. A security property that only holds when called directly is not a security
+property.
