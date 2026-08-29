@@ -1,0 +1,317 @@
+# Meridian Consumer Brands — the world constants.
+#
+# Every parameter here becomes a constant in the generator, and vagueness here
+# becomes incoherence in the data. Values sit inside published ranges for consumer
+# packaged goods; the ranges themselves are recorded next to each so a reader can
+# see what the value is claiming to be.
+#
+# ALL OF THIS IS FICTIONAL. The company, its products and its customers do not exist.
+
+# Fitted once so the simulated business lands on its stated revenue scale. It changes
+# the SIZE of the company and nothing else - no elasticity, shape, noise property or
+# correlation depends on it. Held constant across factual and counterfactual runs.
+demand_scale: 0.9442
+
+company:
+  name: "Meridian Consumer Brands"
+  country: IN
+  currency: INR
+  timezone: Asia/Kolkata
+  fiscal_year_start_month: 4          # Indian FY, April-March
+  target_annual_net_revenue_inr: 8.5e9   # ~Rs 850 crore
+  d2c_revenue_share_target: 0.40         # own web + quick-commerce
+
+horizon:
+  start: "2023-09-01"
+  end: "2026-08-31"
+  order_detail_window_days: 90         # order-line grain only for the recent window
+
+regions:
+  # monsoon_onset_doy is the long-run mean; it varies +/-10 days year to year.
+  - {id: North,   population_weight: 0.26, monsoon_onset_doy: 180, heat_index: 1.15}
+  - {id: West,    population_weight: 0.24, monsoon_onset_doy: 160, heat_index: 1.05}
+  - {id: South,   population_weight: 0.22, monsoon_onset_doy: 152, heat_index: 1.00}
+  - {id: East,    population_weight: 0.16, monsoon_onset_doy: 165, heat_index: 0.95}
+  - {id: Central, population_weight: 0.12, monsoon_onset_doy: 172, heat_index: 1.10}
+
+warehouses:
+  # Cross-serving ratios are what let a DC outage partially recover elsewhere.
+  - {id: DC-North, home_region: North,   serves: [North, Central]}
+  - {id: DC-West,  home_region: West,    serves: [West, Central, North]}
+  - {id: DC-South, home_region: South,   serves: [South]}
+  - {id: DC-East,  home_region: East,    serves: [East, Central]}
+
+demand:
+  # A national weekly cycle every channel shares, Mon..Sun, mean 1.0. Without it the
+  # channel-specific patterns below very nearly cancel at the national level (modern
+  # trade is weekday-heavy, quick-commerce is weekend-heavy) and daily revenue shows
+  # almost no weekly structure - which is not what a real consumer business looks
+  # like, and would leave the detector with no lag-7 seasonality to discover.
+  # Amplitude here is ~29% peak to trough, inside the published +/-10-40% band.
+  national_dow_shape: [0.99, 0.97, 0.96, 0.99, 1.06, 1.13, 0.90]
+
+channels:
+  # dow_shape is a channel DEVIATION from the national cycle above, Mon..Sun,
+  # normalised to mean 1.0 by the geography module.
+  # Quick-commerce peaks at the weekend; modern trade is weekday-heavy. That
+  # difference is what gives the mix dimension real behaviour.
+  - id: d2c_web
+    revenue_share: 0.18
+    margin_uplift: 1.18
+    dow_shape: [1.02, 0.98, 0.97, 1.00, 1.10, 1.12, 0.98]
+    dow_vol: [1.00, 0.95, 0.95, 1.00, 1.15, 1.25, 1.10]
+    price_premium: 1.00
+  - id: quick_commerce
+    revenue_share: 0.22
+    margin_uplift: 0.94
+    dow_shape: [0.88, 0.86, 0.88, 0.95, 1.18, 1.35, 1.20]
+    dow_vol: [0.95, 0.95, 0.95, 1.05, 1.30, 1.45, 1.30]
+    price_premium: 1.06
+  - id: marketplace
+    revenue_share: 0.36
+    margin_uplift: 0.88
+    dow_shape: [1.05, 1.02, 1.00, 1.02, 1.05, 0.98, 0.92]
+    dow_vol: [1.05, 1.00, 1.00, 1.00, 1.05, 1.10, 1.05]
+    price_premium: 0.97
+  - id: modern_trade
+    revenue_share: 0.24
+    margin_uplift: 1.02
+    dow_shape: [1.12, 1.10, 1.08, 1.10, 1.08, 0.82, 0.72]
+    dow_vol: [1.00, 0.95, 0.95, 0.95, 1.00, 1.05, 1.00]
+    price_premium: 1.02
+
+categories:
+  # own_price_elasticity: CPG brand-level meta-analyses report a mean near -2.6
+  #   (Bijmolt et al. 2005); plausible range -0.5 to -4.
+  # cross_price_elasticity: 0 to +1.5, category-dependent.
+  # annual_peak_doy / annual_amplitude give the category x region annual shape.
+  # monsoon_sensitivity is positive where rain lifts demand (surface care, fragrance).
+  - id: Haircare
+    sku_count: 34
+    revenue_share: 0.26
+    own_price_elasticity: -2.10
+    cross_price_elasticity: 0.55
+    annual_peak_doy: 300           # festive/winter oiling season
+    annual_amplitude: 0.128
+    monsoon_sensitivity: 0.10
+    heat_sensitivity: 0.04
+    return_rate: 0.028
+    gross_margin: 0.52
+    ref_price_inr: [180, 620]
+  - id: Skincare
+    sku_count: 30
+    revenue_share: 0.24
+    own_price_elasticity: -1.60
+    cross_price_elasticity: 0.45
+    annual_peak_doy: 330           # winter dryness
+    annual_amplitude: 0.176
+    monsoon_sensitivity: -0.05
+    heat_sensitivity: -0.08
+    return_rate: 0.041
+    gross_margin: 0.58
+    ref_price_inr: [240, 1450]
+  - id: Bodycare
+    sku_count: 26
+    revenue_share: 0.17
+    own_price_elasticity: -2.35
+    cross_price_elasticity: 0.62
+    annual_peak_doy: 340
+    annual_amplitude: 0.152
+    monsoon_sensitivity: -0.04
+    heat_sensitivity: 0.06
+    return_rate: 0.024
+    gross_margin: 0.49
+    ref_price_inr: [150, 540]
+  - id: Home Fragrance
+    sku_count: 22
+    revenue_share: 0.13
+    own_price_elasticity: -1.45
+    cross_price_elasticity: 0.30
+    annual_peak_doy: 296           # festive peak
+    annual_amplitude: 0.272
+    monsoon_sensitivity: 0.22
+    heat_sensitivity: -0.03
+    return_rate: 0.033
+    gross_margin: 0.61
+    ref_price_inr: [220, 1800]
+  - id: Surface Care
+    sku_count: 24
+    revenue_share: 0.13
+    own_price_elasticity: -2.60
+    cross_price_elasticity: 0.80
+    annual_peak_doy: 200           # monsoon cleaning
+    annual_amplitude: 0.12
+    monsoon_sensitivity: 0.30
+    heat_sensitivity: 0.02
+    return_rate: 0.019
+    gross_margin: 0.44
+    ref_price_inr: [95, 380]
+  - id: Baby
+    sku_count: 14
+    revenue_share: 0.07
+    own_price_elasticity: -1.20
+    cross_price_elasticity: 0.25
+    annual_peak_doy: 15
+    annual_amplitude: 0.072
+    monsoon_sensitivity: 0.03
+    heat_sensitivity: 0.05
+    return_rate: 0.036
+    gross_margin: 0.55
+    ref_price_inr: [260, 980]
+
+media:
+  # Short-run advertising elasticity 0.08-0.18 (Sethuraman et al. 2011 report ~0.12).
+  # These are PER-CHANNEL elasticities and they must sum to a plausible TOTAL: the
+  # demand equation applies every channel's adstock term simultaneously, so the sum
+  # is what a single blended "marketing elasticity" would measure. It sums to 0.143,
+  # inside the published band and consistent with the net_revenue contract's prior
+  # of 0.15 +/- 0.10. Performance channels (search, paid social) carry most of it;
+  # brand channels (CTV, display) are less efficient per rupee in the short run.
+  # Digital adstock half-life 5-10 days; shorter for performance, longer for brand.
+  channels:
+    - {id: paid_social, budget_share: 0.30, elasticity: 0.044, adstock_half_life_days: 7,  cpm_inr: 210}
+    - {id: search,      budget_share: 0.26, elasticity: 0.042, adstock_half_life_days: 5,  cpm_inr: 340}
+    - {id: display,     budget_share: 0.14, elasticity: 0.014, adstock_half_life_days: 9,  cpm_inr: 120}
+    - {id: affiliate,   budget_share: 0.12, elasticity: 0.018, adstock_half_life_days: 6,  cpm_inr: 160}
+    - {id: influencer,  budget_share: 0.11, elasticity: 0.017, adstock_half_life_days: 10, cpm_inr: 280}
+    - {id: ctv,         budget_share: 0.07, elasticity: 0.008, adstock_half_life_days: 14, cpm_inr: 430}
+  annual_spend_share_of_revenue: 0.085
+  # Endogeneity. The quarterly plan is exogenous; the tactical overlay responds to
+  # last week's revenue against target. kappa is capped at 0.3 deliberately: any
+  # stronger and the elasticity stops being identifiable, which is a different and
+  # much less useful demonstration.
+  endogeneity_kappa: 0.30
+  # Paid social and display are run by one agency team and move together for two
+  # quarters. This is the planted collinearity the VIF gate must group.
+  collinear_pair: [paid_social, display]
+  collinear_window: ["2025-10-01", "2026-03-31"]
+  collinear_rho: 0.80
+  attributed_revenue_inflation: [1.05, 1.15]   # platform attribution vs order-linked
+
+noise:
+  # Autocorrelation makes a plain z-score understate variance and over-flag, which
+  # is what justifies AR whitening. Heteroscedasticity clusters around promos,
+  # festivals and weekends, which is what justifies EWMA/day-of-week scaling and
+  # makes Breusch-Pagan reject honestly in the flagship scenario.
+  company_ar1_phi: 0.35
+  company_sigma0: 0.060
+  promo_vol_multiplier: 0.60
+  festival_vol_multiplier: 0.40
+  idiosyncratic_sigma_large: 0.11
+  idiosyncratic_sigma_small: 0.34
+  small_cell_units_threshold: 12.0
+  intermittent_sku_count: 4          # at least one SKU with >40% zero days
+
+festivals:
+  # Populated from the `holidays` package (India) - never hard-coded dates - and
+  # then hand-tagged for demand relevance here. A festival is a WINDOW: ~10 days of
+  # pre-build and ~7 days of post-lull, not a one-day spike. A detector that treats
+  # it as a dummy mis-forecasts the lull, which is a deliberate trap for our own
+  # detector and passing it is a demo point.
+  # `match` is the substring looked for in the `holidays` package's own label for a
+  # date; `subdiv` is the Indian state whose calendar carries it (regional festivals
+  # are subdivision holidays, not national ones). A configured festival that matches
+  # nothing in the horizon is a hard error, so a package rename cannot silently
+  # remove a festival from the world.
+  demand_relevant:
+    Diwali:
+      match: "Diwali"
+      subdiv: null
+      peak_uplift: 1.712
+      pre_build_days: 10
+      post_lull_days: 7
+      post_lull_depth: 0.82
+      regions: all
+    Dussehra:
+      match: "Dussehra"
+      subdiv: null
+      peak_uplift: 1.315
+      pre_build_days: 7
+      post_lull_days: 4
+      post_lull_depth: 0.90
+      regions: all
+    Holi:
+      match: "Holi"
+      subdiv: null
+      peak_uplift: 1.225
+      pre_build_days: 5
+      post_lull_days: 3
+      post_lull_depth: 0.92
+      regions: all
+    Raksha Bandhan:
+      match: "Raksha"
+      subdiv: UK
+      peak_uplift: 1.165
+      pre_build_days: 5
+      post_lull_days: 2
+      post_lull_depth: 0.95
+      regions: all
+    Onam:
+      match: "Onam"
+      subdiv: KL
+      peak_uplift: 1.413
+      pre_build_days: 8
+      post_lull_days: 5
+      post_lull_depth: 0.88
+      regions: [South]
+    Pongal:
+      match: "Pongal"
+      subdiv: TN
+      peak_uplift: 1.263
+      pre_build_days: 6
+      post_lull_days: 3
+      post_lull_depth: 0.91
+      regions: [South]
+    Eid al-Fitr:
+      match: "Id-ul-Fitr"
+      subdiv: null
+      peak_uplift: 1.255
+      pre_build_days: 8
+      post_lull_days: 4
+      post_lull_depth: 0.90
+      regions: all
+    Ganesh Chaturthi:
+      match: "Ganesh Chaturthi"
+      subdiv: MH
+      peak_uplift: 1.21
+      pre_build_days: 6
+      post_lull_days: 3
+      post_lull_depth: 0.92
+      regions: [West]
+  # Month-end trade loading: a real, movable, non-annual cadence.
+  month_end_uplift: 1.11
+  month_end_days: 3
+
+promo:
+  # Depth-dependent lift 1.4x-2.6x; plausible range 1.2x-5x.
+  base_weekly_probability: 0.09
+  festival_weekly_probability: 0.24
+  depth_choices: [0.05, 0.10, 0.15, 0.20, 0.30]
+  lift_at_depth: [1.15, 1.40, 1.75, 2.10, 2.60]
+  duration_days: [3, 7, 14]
+
+supply:
+  baseline_fill_rate: 0.968          # CPG service-level target band 92-99%
+  review_period_days: 7
+  lead_time_days: {mean: 9, sd: 2.5}
+  safety_stock_weeks: 2.0
+  forecast_bias: 1.02                # the replenishment forecast is imperfect
+  forecast_noise_cv: 0.18
+  substitution_leak: 0.35            # of censored demand that moves to a substitute
+  shrinkage_rate: 0.004
+
+returns:
+  lag_days: {min: 7, max: 21}
+
+competitor:
+  price_index_ar1: 0.88
+  price_index_sigma: 0.012
+  sku_coverage: 0.60                 # the panel only matches ~60% of our SKUs
+  match_confidence: {mean: 0.85, sd: 0.09}
+
+launches:
+  # Three SKUs launch inside the window. "Aurora X" is Scenario C: 18 days of
+  # history at SIM_TODAY, with a days-15-20 dip that is INSIDE the pooled band.
+  - {sku_name: "Aurora X Serum",        category: Skincare,       launch_date: "2026-03-11", velocity_ratio: 1.42}
+  - {sku_name: "Meridian Cedar Mist",   category: Home Fragrance, launch_date: "2025-08-19", velocity_ratio: 0.88}
+  - {sku_name: "PureCare Baby Balm",    category: Baby,           launch_date: "2024-11-05", velocity_ratio: 1.06}

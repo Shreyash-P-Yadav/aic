@@ -212,3 +212,147 @@ contracts' `actions_ref` but are not built yet — they belong to P7 (actions) a
 (personas). The reference is a string in the contract and is not resolved at load,
 so nothing depends on them existing yet.
 
+---
+
+## P2 — Data generation: world, latent process, decisions, outcomes · DONE
+
+**Built.**
+
+- `datagen/world/seeds.py` — **`SeedBook` / `rng_for`, the content-addressed RNG.**
+  Every draw is addressed by a stable content key, never by stream position. Vector
+  draws span the *whole* horizon and are indexed by day offset from a fixed epoch, so
+  a windowed counterfactual slices the same vector rather than re-drawing it.
+- `datagen/world/config.yaml` + `config.py` — the Meridian constants as a typed,
+  validated table: 150 SKUs / 6 categories / 5 regions / 4 channels / 4 DCs, the
+  elasticity and seasonality parameters with their published ranges recorded beside
+  them, the media plan, the noise structure, promo policy, supply policy.
+- `datagen/world/calendar.py` — fiscal Apr–Mar, ISO weeks, month-end trade loading,
+  and **movable festivals resolved from the `holidays` package** (national and
+  subdivision calendars; a configured festival that matches nothing is a hard error).
+  Festivals are *windows*: a pre-build ramp, a peak, then a lull **below** baseline.
+  Monsoon onset per region varies ±10 days a year, drawn by content key.
+- `datagen/world/geography.py` — regions, DCs, the cross-serving service matrix, and
+  the channel day-of-week level and volatility tables.
+- `datagen/world/catalog.py` — the SKU master, three in-window launches (Aurora X
+  Serum at 18 days of history on the demo's "today"), 24 discontinued SKUs, the
+  pooled launch curve, and the intermittent slow movers.
+- `datagen/latent/` — `noise.py` (company AR(1), the heteroscedastic scale, per-cell
+  lognormal noise, unbiased stochastic rounding to whole units), `seasonality.py`
+  (category×region annual shape, weather response, adstock, depth-dependent promo lift).
+- `datagen/decisions/` — `pricing.py` (competitor AR(1) index with partial
+  pass-through, the exogenous promo schedule, the planted regime break, the
+  endogenous overstock discount), `media.py` (**the endogenous budget**),
+  `replenishment.py` (periodic-review order-up-to on a deliberately imperfect
+  forecast), `assortment.py` (the listing grid, 1,772 of 3,000 cells).
+- `datagen/outcomes/inventory.py` — the on-hand / in-transit / receipts / shrinkage
+  state machine.
+- `datagen/events/overlay.py` — **the single seam through which an event may perturb
+  the simulation.** `NoEvents`, `CompositeOverlay`, and an exactly-identity
+  `DayEffects`. P3's ledger plugs in here and nowhere else.
+- `datagen/simulate.py` — the sequential day loop over vectorised cell arrays, with
+  every stochastic input drawn *before* the loop starts. The loop itself contains no
+  randomness at all.
+- `datagen/panel.py`, `datagen/writer.py` — the output container with its bit-level
+  checksum, and parquet + manifest output. `make generate` is wired.
+
+**Gate:** `make verify-p2` — exit code 0.
+
+```
+.venv/bin/pytest tests/statistical/test_p2_world.py
+.........................                                                [100%]
+25 passed in 27.74s
+```
+
+All 25 tests, named:
+
+```
+tests/statistical/test_p2_world.py::test_a_zero_magnitude_event_changes_nothing PASSED [  4%]
+tests/statistical/test_p2_world.py::test_the_event_seam_is_not_inert PASSED [  8%]
+tests/statistical/test_p2_world.py::test_the_same_seed_reproduces_the_same_world PASSED [ 12%]
+tests/statistical/test_p2_world.py::test_a_different_seed_produces_a_different_world PASSED [ 16%]
+tests/statistical/test_p2_world.py::test_two_generations_write_byte_identical_parquet PASSED [ 20%]
+tests/statistical/test_p2_world.py::test_daily_revenue_has_a_significant_lag_seven_peak PASSED [ 24%]
+tests/statistical/test_p2_world.py::test_the_planted_ar_one_coefficient_is_recovered PASSED [ 28%]
+tests/statistical/test_p2_world.py::test_breusch_pagan_rejects_on_raw_residuals PASSED [ 32%]
+tests/statistical/test_p2_world.py::test_ljung_box_does_not_reject_after_whitening PASSED [ 36%]
+tests/statistical/test_p2_world.py::test_daily_national_revenue_cv_is_in_band PASSED [ 40%]
+tests/statistical/test_p2_world.py::test_at_least_one_series_is_genuinely_intermittent PASSED [ 44%]
+tests/statistical/test_p2_world.py::test_transaction_amounts_follow_benford PASSED [ 48%]
+tests/statistical/test_p2_world.py::test_units_are_whole_numbers PASSED  [ 52%]
+tests/statistical/test_p2_world.py::test_the_business_is_the_size_it_claims_to_be PASSED [ 56%]
+tests/statistical/test_p2_world.py::test_fill_rate_sits_in_the_cpg_service_band PASSED [ 60%]
+tests/statistical/test_p2_world.py::test_return_rate_is_category_appropriate PASSED [ 64%]
+tests/statistical/test_p2_world.py::test_gross_margin_is_plausible PASSED [ 68%]
+tests/statistical/test_p2_world.py::test_d2c_share_is_near_its_target PASSED [ 72%]
+tests/statistical/test_p2_world.py::test_channel_day_of_week_patterns_differ_in_the_expected_direction PASSED [ 76%]
+tests/statistical/test_p2_world.py::test_no_impossible_quantities_or_prices PASSED [ 80%]
+tests/statistical/test_p2_world.py::test_festivals_have_a_pre_build_and_a_post_lull PASSED [ 84%]
+tests/statistical/test_p2_world.py::test_marketing_spend_responds_to_prior_week_revenue PASSED [ 88%]
+tests/statistical/test_p2_world.py::test_the_collinear_media_pair_actually_moves_together PASSED [ 92%]
+tests/statistical/test_p2_world.py::test_the_regime_break_is_a_level_shift_in_price PASSED [ 96%]
+tests/statistical/test_p2_world.py::test_the_sparse_history_launch_exists_and_is_recent PASSED [100%]
+```
+
+**Measured numbers** (seed 20260329, 1,096 days, 1,772 listed cells):
+
+```
+annual net revenue                  Rs 853.1 cr   target Rs 850 cr (+/-10%)
+daily national revenue CV                 0.230   band 0.18-0.25
+ACF lag 7 / 6 / 8              0.332 / -0.093 / -0.091   lag-7 peak, significant
+ACF lag 14 / 21                   0.372 / 0.303   weekly cycle persists
+recovered AR(1) phi                       0.394   planted 0.35 +/- 0.08
+Breusch-Pagan p (raw resid)            7.76e-10   MUST reject (< 0.05)
+Ljung-Box p (after whitening)             0.976   must NOT reject (> 0.05)
+national fill rate                       0.9854   CPG band 0.92-0.99
+return rate                              0.0287   home & personal care 0.02-0.05
+blended gross margin                      0.508   0.40-0.62
+SKUs with >40% zero days                     12   at least 1 (Croston case)
+Benford mean abs deviation               0.0006   close fit < 0.012
+```
+
+Generation: **6.4 s** wall for the full 36 months (target ≤ 90 s), 2,352,917 rows
+across six parquet tables, 61 MB on disk.
+
+**The determinism gate, specifically.** `test_a_zero_magnitude_event_changes_nothing`
+runs the simulator with an event whose multipliers are all exactly 1.0 and whose
+addend is exactly 0.0, and asserts the SHA-256 of every numeric array is unchanged.
+It passes. `test_the_event_seam_is_not_inert` then asserts a real event *does* change
+the checksum, so the first test cannot pass vacuously.
+`test_two_generations_write_byte_identical_parquet` extends this to the on-disk
+artefact, comparing raw file bytes rather than dataframes.
+
+**Endogeneity preview** (the P6 gate will formalise this; measured here to confirm the
+data supports it): true total marketing elasticity **0.143**; naive OLS on calendar
+controls alone recovers **0.450** — biased up **+215%**; the DAG-specified regression
+recovers **0.163 [0.106, 0.220]** — **14.1%** from truth, inside the ±25% target.
+
+**File split.** `simulate.py` first came in at 638 lines, over the 400-line hard
+limit. Rather than record that as a known issue, it was split along the seams the
+repo map already implies, and each extracted piece became a **pure function** taking
+explicit inputs instead of reading `self`:
+
+| Module | Lines | What moved |
+|---|---|---|
+| `simulate.py` | 360 | `Simulator`: setup and the day loop |
+| `state.py` | 129 | `Precomputed` (typed, one field per stochastic input) and `Accumulators` |
+| `precompute.py` | 113 | Drawing every stochastic input before the loop starts |
+| `latent/demand.py` | 91 | The multiplicative demand equation, and the residual-promo-lift correction |
+| `outcomes/fulfilment.py` | 82 | Home-DC serving and cross-serving at a penalty |
+| `outcomes/returns.py` | 44 | Booking returns into their 7-21 day arrival |
+
+The panel checksum is **identical before and after the split** (`8ac6d7be7f17e62c…`),
+which is the only evidence worth having that a refactor of a determinism-critical
+module changed nothing.
+
+**Deferred.**
+
+- `datagen/outcomes/orders.py` and `latent/elasticities.py` as separate modules.
+  Order generation is two lines inside the day loop (cancellations applied to served
+  units) and elasticities are configuration — they live in `config.yaml`, typed in
+  `config.py`. Splitting either would create a module smaller than its own import
+  block.
+- `poisson_counts()` in `latent/noise.py` is implemented and unit-covered by the
+  intermittency test's outcome but is not called: unbiased stochastic rounding turned
+  out to produce the required >40% zero-day series (12 SKUs qualify) without a
+  separate Poisson path. Kept for the count-KPI branch of the adaptation matrix.
+

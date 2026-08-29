@@ -1,12 +1,12 @@
 # Build Progress
-Updated: 2026-08-29T01:27:35Z
-Current phase: P2
+Updated: 2026-08-29T02:05:14Z
+Current phase: P3
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
 | P0 | Bootstrap | DONE | `make verify-p0` | PASS | lint, mypy --strict, tsc, 5 unit tests, vite build all green; `GET /api/health` returns `{"status":"ok",...}`; vite dev serves a styled page with theme tokens compiled |
 | P1 | Contracts, security, audit | DONE | `make verify-p1` | PASS | 6 KPI + 11 source contracts validate; 40 tests green incl. the adversarial-injection and audit-completeness cases |
-| P2 | Datagen: world, latent, decisions, outcomes | PENDING | `make verify-p2` | — | |
+| P2 | Datagen: world, latent, decisions, outcomes | DONE | `make verify-p2` | PASS | Determinism gate green (zero-magnitude event is byte-identical); 25 tests; annual Rs 853 cr, CV 0.230, AR(1) 0.394, ACF lag-7 0.332, BP 7.8e-10, LB 0.976, fill 0.985; generation 6.4 s |
 | P3 | Events and ground truth | PENDING | `make verify-p3` | — | |
 | P4 | Source projection, defects, corpus | PENDING | `make verify-p4` | — | |
 | P5 | Landing zone, harness, ingestion | PENDING | `make verify-p5` | — | |
@@ -49,6 +49,56 @@ Current phase: P2
   list does not mention it, and `artifacts/eval_report.md` plus the screenshots are
   named deliverables in the definition of done. Generated *data* (`data/`,
   `landing/`, `*.duckdb`, `*.parquet`) is ignored as specified.
+- **P2 — `simulate.py` split into six modules to stay under the 400-line limit.**
+  It first came in at 638 lines. Split into `simulate.py` (360), `state.py` (129),
+  `precompute.py` (113), `latent/demand.py` (91), `outcomes/fulfilment.py` (82) and
+  `outcomes/returns.py` (44); each extracted piece is a pure function taking explicit
+  inputs rather than reading `self`. The panel checksum is byte-identical before and
+  after, which is the evidence that the refactor changed nothing.
+- **P2 — vector draws instead of scalar draws, still content-addressed.** A
+  Generator construction per scalar draw would be ~1.15 M constructions per run
+  (~17 s, and the calibration corpus in P11 needs hundreds of runs). Instead a
+  content key addresses a whole *cell* and the draw is a vector spanning the entire
+  horizon, indexed by day offset from a fixed epoch. This is still content-addressed
+  — the index is a date, not a consumption order — and the determinism test enforces
+  it. Two rules keep it honest and are documented in `seeds.py`: the vector always
+  spans the whole history (a windowed run slices, never re-draws), and a key is never
+  reused for two quantities.
+- **P2 — `demand_scale`, a single fitted calibration constant.** The simulated
+  business must land on its stated Rs 850 cr scale. `demand_scale` is fitted once and
+  stored in `config.yaml`; it multiplies national demand and nothing else. It is a
+  stored constant rather than an auto-fit *because a counterfactual re-run must use
+  the same scale as the factual run* — re-fitting per run would let removing an event
+  change the scale and contaminate every ground-truth number. The P2 gate asserts the
+  resulting revenue stays within 10% of target, so drift cannot go unnoticed.
+- **P2 — media elasticities re-scaled to sum to 0.143.** As first written, the six
+  per-channel elasticities summed to 0.75. The demand equation applies every
+  channel's adstock term simultaneously, so the *sum* is what a blended marketing
+  elasticity measures — 0.75 is five times the published short-run range and it made
+  daily revenue CV 0.40. Rescaled so the total sits at 0.143, inside the 0.08-0.18
+  band and consistent with the `net_revenue` contract's 0.15 +/- 0.10 prior.
+- **P2 — a shared national weekly cycle was added.** With only channel-specific
+  day-of-week shapes, modern trade (weekday-heavy) and quick-commerce (weekend-heavy)
+  very nearly cancelled at national level: weekly amplitude was +/-5% and the ACF had
+  no lag-7 peak at all. A business with no weekly structure is not realistic and
+  would leave the detector's period discovery with nothing to find. Channel shapes
+  are now deviations from a shared national cycle.
+- **P2 — media channels were all collinear; fixed in three places.** The
+  `test_the_collinear_media_pair_actually_moves_together` test caught that *every*
+  media pair correlated at ~0.88, not just the planted one — a shared quarterly drift
+  draw, a shared daily pacing vector, and a large shared seasonal multiplier. Each is
+  now per-channel, plus an independent per-channel AR(1) budget wobble. The planted
+  pair is modelled properly as **one agency team planning both budgets off one plan**
+  (they share a plan key inside the window, so they share their quarterly revision
+  and seasonal phase), rather than as a correlated shock bolted onto independent
+  plans. Result: the pair correlates 0.80 inside its window against a 0.13 median
+  elsewhere, which is a pathology the VIF gate can actually isolate.
+- **P2 — units are whole numbers via unbiased stochastic rounding.** Orders are
+  counts. Plain rounding would erase every slow-moving SKU (0.4 expected units a day
+  rounds to zero every day); stochastic rounding preserves the mean exactly and
+  produces genuine runs of zero days. This is what makes the intermittent series a
+  real Croston case, and it is why transaction amounts follow Benford (measured MAD
+  0.0006).
 - **P1 — KPI contract models split across three modules.** `models.py` reached 452
   lines, over the 400-line hard limit. Split into `common.py` (shared strict-model
   base, identifier allowlist, SQL-fragment check), `models.py` (structure: grain,
@@ -81,7 +131,32 @@ Current phase: P2
 
 ## Phase plans
 
-### P2 plan (next)
+### P3 plan (next)
+
+1. `datagen/events/models.py` — the event schema from DataLayer §8 (event_id, type,
+   scope, window, magnitude, detectability, evidence spec, ground_truth spec,
+   demo_role), and `ledger.py` to load and index it.
+2. `datagen/events/scenarios/*.yaml` — the four hand-authored scenarios:
+   **A** WH-North outage + paid-social cut + Category-A price rise, week of 9 Mar
+   2026, target ~ -12% weekly net revenue; **B** MarTech 9 days stale + 18%
+   reconciliation break; **C** Aurora X day-18 dip inside the pooled launch band;
+   **D** entitlement (no special data — exercised through the compiler).
+3. `datagen/events/ambient.py` — routine background events so the detector has
+   realistic non-events to ignore.
+4. `datagen/events/calibration_gen.py` — the stochastic generator, >= 400 events
+   spread over magnitude, segment concentration, evidence availability and data
+   condition. Scenario events tagged so they can be excluded from the calibration fit.
+5. `datagen/events/overlay_from_ledger.py` — turn ledger events into `DayEffects`.
+6. `datagen/truth/` — `counterfactual.py` (windowed re-simulation, event window
+   +/-60 days, warm-started) and `shapley.py` (2^n subsets for overlapping events,
+   n=3 -> 8 runs). Record BOTH total effect (with operational feedback) and direct
+   effect. Write `data/ledger.parquet`.
+7. `tests/statistical/test_p3_truth.py` — the gate: Shapley contributions for
+   Scenario A sum to the observed gap within 1%; Scenario A's aggregate movement is
+   within 1pp of -12%; >= 400 calibration events with the intended spread; scenario
+   events are excludable from calibration fitting.
+
+### P2 plan (done)
 
 Implement DataLayer §3–§4. Order matters: D1's determinism gate blocks everything.
 

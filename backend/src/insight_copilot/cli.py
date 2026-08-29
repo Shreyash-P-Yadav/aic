@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 
 from insight_copilot.config import get_settings
 from insight_copilot.contracts.registry import ContractRegistry
-from insight_copilot.errors import ContractError
+from insight_copilot.errors import ContractError, SimulationError
 from insight_copilot.logging import get_logger
 
 logger = get_logger(__name__)
@@ -63,10 +63,36 @@ def _cmd_validate_contracts(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_generate(_: argparse.Namespace) -> int:
+    """Simulate the world and write the L3 truth tables."""
+    import time
+
+    from insight_copilot.datagen.simulate import Simulator
+    from insight_copilot.datagen.writer import write_truth_tables
+
+    cfg = get_settings()
+    cfg.ensure_dirs()
+    try:
+        started = time.perf_counter()
+        simulator = Simulator.from_defaults(cfg.seed)
+        panel = simulator.run()
+        result = write_truth_tables(
+            simulator, panel, cfg.data_dir, elapsed=time.perf_counter() - started
+        )
+    except SimulationError as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+    print(result.summary())
+    print("      All data is simulated. Meridian Consumer Brands is a fictional company.")
+    return 0
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
-    "generate": _not_yet("P2"),
+    "generate": _cmd_generate,
     "backfill": _not_yet("P5"),
     "run": _not_yet("P6"),
     "backtest": _not_yet("P11"),

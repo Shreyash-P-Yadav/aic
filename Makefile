@@ -112,7 +112,7 @@ verify-p1:  ## P1 gate: contracts validate; compiler entitlements and audit hold
 	$(MAKE) validate-contracts
 	$(PYTEST) tests/unit/test_contracts.py tests/unit/test_compiler.py
 
-verify-p2:
+verify-p2:  ## P2 gate: determinism first, then the realism suite
 	$(PYTEST) tests/statistical/test_p2_world.py
 
 verify-p3:
