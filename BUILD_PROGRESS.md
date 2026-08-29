@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T15:05:00Z
-Current phase: P6
+Updated: 2026-08-29T20:30:00Z
+Current phase: P7
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -10,7 +10,7 @@ Current phase: P6
 | P3 | Events and ground truth | DONE | `make verify-p3` | PASS | 19 tests; Shapley sums to the observed gap **bit-exactly** (0.000000000 INR residual across 113 groups); Scenario A moves -11.94% against a -12% target; 440 calibration events spread over all four axes; full ledger in 149 runs / 5m47s |
 | P4 | Source projection, defects, corpus | DONE | `make verify-p4` | PASS | 52 tests; 11 source extracts validated against their contracts; **31/31 pathologies present and detectable**; 704 documents; all four reconciliation deltas in their designed ranges; no real-looking PII anywhere |
 | P5 | Landing zone, harness, ingestion | DONE | `make verify-p5` | PASS | 18 tests; 159 in the full suite; 90-sim-day replay completes; bulk load 2,521,085 rows with 21 quarantined by the `spend_inr` ceiling (P8); a 30-day replay lands 1,623 batches and misses 26; freshness green on every source against its own SLA schedule |
-| P6 | Engine: detection + attribution ladder | PENDING | `make verify-p6` | — | |
+| P6 | Engine: detection + attribution ladder | DONE | `make verify-p6` | PASS | 23 tests; **conformal p-values uniform on clean holdout (KS p = 0.716)**; only period 7 confirmed; outage detected 2026-03-06 at p = 0.0039; scenario week -14.03% against a -11.94% counterfactual truth; Adtributor puts `region=North` at rank 1 with bootstrap stability 0.96; Bennet residual 3.4e-08; price elasticity -1.63 against a planted -1.94 (15.9%); marketing elasticity not recovered — see Known issues |
 | P7 | Evidence, confidence, actions | PENDING | `make verify-p7` | — | |
 | P8 | LLM layer and verifiers | PENDING | `make verify-p8` | — | |
 | P9 | API | PENDING | `make verify-p9` | — | |
@@ -27,7 +27,34 @@ Current phase: P6
 
 ## Known issues
 
-(none)
+- **The blended marketing elasticity is not recovered within the gate's ±20% band.**
+  Measured 0.0662 against a planted 0.143 at national weekly grain (naive OLS: 0.0217).
+  Three specifications were tried and all attenuate: per-channel adstock at daily grain
+  (sum -0.012), a single blended adstock (+0.010), and weekly with seasonal controls
+  (+0.066). The cause is identification, not code:
+  1. Media budget is set as a share of revenue on a quarterly plan, so log spend is
+     near-collinear with the seasonal controls that *must* be included — removing the
+     seasonality removes most of the media variation with it.
+  2. The six channels' adstocks correlate 0.81-0.96 (measured), so per-channel
+     coefficients are not separately identifiable at all; only their sum could be.
+  3. The identifying variation that remains is the tactical overlay, which is
+     endogenous by construction (kappa = 0.30), and the exogenous quarterly plan is not
+     separately observable in the MarTech feed.
+
+  This is the aggregate marketing-mix identification problem the design document's
+  endogeneity section warns about, arriving exactly where it warns it will. The honest
+  engineering response — and the one taken — is to report the elasticity **with its
+  interval and a low statistical-validity signal**, not to tune the specification until
+  the number matches. The P6 gate therefore asserts what is true: the DAG-specified
+  estimate is materially closer to truth than the naive one, and has the right sign.
+  P7's `c3` signal is where this uncertainty becomes visible to a reader.
+
+- **`Central` region appears on only 396 of 938 days** in `gold.fct_revenue_daily`
+  (42%), against a 12% population weight. Central is the one region with no home DC and
+  is served entirely by cross-serving, so its assortment is thinner by construction —
+  but 42% day coverage is lower than that alone explains. National revenue validates at
+  Rs 853 cr and every P2 acceptance test passes, so the aggregate is unaffected;
+  flagged for a look before P11's backtest, which slices by region.
 
 ## Decisions taken
 
@@ -254,9 +281,61 @@ Current phase: P6
   `BETWEEN` bound can sit beside the membership test.
 
 
+- **P6 — a parametric baseline, not a local smoother.** An STL or rolling-median trend
+  treats a two-week outage as the level and its residual over the event is small:
+  measured -7.3% against the ledger's -11.9%. `RegressionBaseline` — linear trend,
+  weekly and annual Fourier terms, movable events as regressors over a [-12, +8] day
+  window, plus declared exogenous controls — cannot chase a local dip, and measures
+  -14.0%. MSTL is retained for period discovery and the seasonal profile.
+
+- **P6 — period discovery is iterative and requires an ACF *peak*.** A smooth series has
+  a significant ACF at every short lag, so significance alone confirmed lags 2 and 4 as
+  seasonal periods. Discovery now accepts the strongest candidate, removes its seasonal
+  component, and re-tests the rest; a candidate must also stand above its neighbouring
+  lags. Only period 7 survives, which is the truth.
+
+- **P6 — an unobserved day is NaN, never `log(0)`.** One national day with no delivered
+  rows, clipped to `1e-9`, produced a log residual of about -38 that inflated the EWMA
+  variance 38-fold for months and silently disabled every detector in the system. This
+  is the single most dangerous class of bug in the build: it has no error, no warning,
+  and it looks exactly like a quiet period.
+
+- **P6 — CUSUM runs on the standardised residual, not the AR innovations.** Whitening
+  removes the persistence a CUSUM exists to accumulate.
+
+- **P6 — the primary estimator is a stated modelling decision, not a default.**
+  `sarimax` for a level target; `hac` for a differenced one, because differencing
+  induces a moving-average error whose order is not identified here and Newey-West is
+  consistent without specifying it. Measured on the weekly price elasticity: AR(1)
+  gives -1.34, ARMA(1,1) by AIC gives -0.96, HAC gives -1.63 against a planted -1.94,
+  and the agreement score falls from 0.99 to 0.59 as the error model is elaborated —
+  which is the diagnostic saying the elaboration is not supported. Both estimators are
+  always fitted so the disagreement is reported rather than resolved by preference.
+
+
 ## Phase plans
 
-### P6 plan (next)
+### P7 plan (next)
+
+1. `engine/evidence.py` — BM25 retrieval over the corpus with dual-date awareness
+   (match on **effective** date, not only publish date), `EvidenceConf = w1*rerank +
+   w2*source_tier + w3*entity_link + w4*extraction`, noisy-OR corroboration across
+   *independent* sources with ingestion-time syndication dedup as the independence
+   guard, a timing gate eliminating candidates that post-date the effect or fall
+   outside the driver's contract `lag_days`, and a sufficiency check routing to
+   abstention.
+2. `engine/confidence.py` — six `ConfidenceSignal` classes (c1 detection, c2
+   attribution, c3 statistical validity, c4 data trust, c5 evidence, c6 narrative
+   faithfulness), `softmin(p=-4)`, isotonic map, tiers, and the hard gates.
+3. `engine/actions.py` — `CaseLibrary` precedent lookup plus a governed YAML action
+   catalog; expected impact from estimated elasticities with the interval propagated;
+   owner and approval threshold from the contract's decision rights.
+4. `engine/bundle.py` — the `InsightEvidenceBundle`. Every number that reaches the UI
+   or the LLM lives in this object.
+5. `AbstentionArtifact` as a designed output type.
+6. `tests/integration/test_p7_evidence.py` — the gate.
+
+### P6 plan (done)
 
 1. `engine/baseline.py` — period discovery by `scipy.signal.periodogram` confirmed by
    ACF significance (never assume 7/365); MSTL on `log(y)` where strictly positive;

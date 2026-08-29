@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P6 — Analytical engine: detection and the attribution ladder.** P0–P5 are DONE.
+**P7 — Evidence, confidence, actions.** P0–P6 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -65,7 +65,8 @@ backend/src/insight_copilot/
               landing (LandingZone + SourceWatcher) replay controls factory
   ingest/     warehouse registry bronze dq dq_store expectations conform silver
               gold panel freshness reconcile runner policies masking models
-  engine/     baseline detect gate attribute_where attribute_kind attribute_why
+  engine/     series periods baseline regression_baseline residuals detect gate
+              cube attribute_where attribute_kind attribute_why design dataset
               evidence confidence actions bundle
   llm/        provider planner hypotheses narrate verify_numbers verify_entailment
               templates router

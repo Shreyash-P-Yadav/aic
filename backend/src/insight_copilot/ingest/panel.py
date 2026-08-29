@@ -87,9 +87,12 @@ class PanelBuilder:
         holidays: dict[dt.date, str] = {}
         for row in found.itertuples():
             day = row.holiday_date
-            if pd.isna(day) or not isinstance(day, dt.date):
+            if pd.isna(day):
                 continue
-            holidays[day] = str(row.holiday_name)
+            # DuckDB DATE columns come back as pandas Timestamps; the spine's own date
+            # column holds plain ``datetime.date``, and an ``isin`` across the two types
+            # silently matches nothing. Normalise both to the same type.
+            holidays[pd.Timestamp(str(day)).date()] = str(row.holiday_name)
         return holidays
 
     # ----------------------------------------------------------------- panel --
@@ -113,79 +116,104 @@ class PanelBuilder:
         return self._warehouse.row_count("gold", PANEL_TABLE)
 
     def _panel_sql(self) -> str:
-        """The pre-joined panel. Optional feeds join as ``NULL`` until they land."""
-        fulfilment = (
-            """
-            LEFT JOIN (
-                SELECT date, region,
-                       sum(units_shipped_ok) AS units_shipped_ok,
-                       sum(units_ordered)    AS units_ordered
-                FROM gold.fct_fulfilment_daily WHERE date BETWEEN $lo AND $hi GROUP BY date, region
-            ) f ON f.date = r.date AND f.region = r.region
-            """
-            if self._warehouse.exists("gold", "fct_fulfilment_daily")
-            else "LEFT JOIN (SELECT NULL AS date, NULL AS region, "
-            "NULL AS units_shipped_ok, NULL AS units_ordered) f ON false"
-        )
-        marketing = (
-            f"""
-            LEFT JOIN (
-                SELECT iso_week, region,
-                       sum(spend_inr) / {DAYS_PER_WEEK}               AS daily_spend_inr,
-                       sum(attributed_revenue_inr) / {DAYS_PER_WEEK}  AS daily_attributed_inr
-                FROM gold.fct_marketing_weekly WHERE date BETWEEN $lo AND $hi
-                GROUP BY iso_week, region
-            ) m ON m.iso_week = r.iso_week AND m.region = r.region
-            """
-            if self._warehouse.exists("gold", "fct_marketing_weekly")
-            else "LEFT JOIN (SELECT NULL AS iso_week, NULL AS region, "
-            "NULL AS daily_spend_inr, NULL AS daily_attributed_inr) m ON false"
-        )
-        weather = (
-            """
-            LEFT JOIN (
-                SELECT date, region, avg(temp_max_c) AS temp_max_c,
-                       avg(rainfall_mm) AS rainfall_mm
-                FROM silver.weather_daily WHERE date BETWEEN $lo AND $hi GROUP BY date, region
-            ) w ON w.date = r.date AND w.region = r.region
-            """
-            if self._warehouse.exists("silver", "weather_daily")
-            else "LEFT JOIN (SELECT NULL AS date, NULL AS region, NULL AS temp_max_c, "
-            "NULL AS rainfall_mm) w ON false"
-        )
-        calendar = (
-            "LEFT JOIN (SELECT * FROM gold.dim_calendar WHERE date BETWEEN $lo AND $hi) c "
-            "ON c.date = r.date"
-            if self._warehouse.exists("gold", CALENDAR_TABLE)
-            else "LEFT JOIN (SELECT NULL AS date, false AS is_holiday, '' AS holiday_name) "
-            "c ON false"
-        )
+        """The pre-joined panel, built from CTEs so each source joins at its own grain.
+
+        Two joins deserve a note:
+
+        * **Media is national.** The MarTech feed reports ``region = 'ALL'``, so a
+          region join would return nothing. Weekly national spend is spread evenly
+          across its seven days and then **allocated to regions in proportion to that
+          day's revenue share**. It is an allocation and it is labelled as one: the
+          feed does not observe regional spend, and pretending it does would put a
+          fabricated number in a regression. The allocation is exact in aggregate, so
+          the national panel recovers the national total.
+        * **Optional feeds join as NULL until they land.** During a cold start the OMS
+          arrives hours before the PIM and days before the competitor panel; a pipeline
+          that failed on that would never survive its own first day.
+        """
+        parts = [_REVENUE_CTE, _SHARES_CTE]
+        joins: list[str] = []
+        if self._warehouse.exists("gold", "fct_fulfilment_daily"):
+            parts.append(_FULFILMENT_CTE)
+            joins.append("LEFT JOIN fulfilment f ON f.date = r.date AND f.region = r.region")
+            fill = "100.0 * f.units_shipped_ok / nullif(f.units_ordered, 0)"
+        else:
+            fill = "CAST(NULL AS DOUBLE)"
+        if self._warehouse.exists("gold", "fct_marketing_weekly"):
+            parts.append(_MEDIA_CTE)
+            joins.append("LEFT JOIN media m ON m.iso_week = r.iso_week")
+            spend = "m.daily_spend_inr * r.region_share"
+            attributed = "m.daily_attributed_inr * r.region_share"
+        else:
+            spend = attributed = "CAST(NULL AS DOUBLE)"
+        if self._warehouse.exists("silver", "weather_daily"):
+            parts.append(_WEATHER_CTE)
+            joins.append("LEFT JOIN weather w ON w.date = r.date AND w.region = r.region")
+            temperature, rainfall = "w.temp_max_c", "w.rainfall_mm"
+        else:
+            temperature = rainfall = "CAST(NULL AS DOUBLE)"
+        if self._warehouse.exists("gold", CALENDAR_TABLE):
+            joins.append(f"LEFT JOIN gold.{CALENDAR_TABLE} c ON c.date = r.date")
+            holiday, holiday_name = "coalesce(c.is_holiday, false)", "coalesce(c.holiday_name, '')"
+        else:
+            holiday, holiday_name = "false", "''"
+
         return f"""
+        WITH {", ".join(parts)}
         SELECT
             r.date, r.region, r.iso_week,
             r.net_revenue_inr, r.units,
-            r.gross_revenue_inr / nullif(r.units, 0)              AS asp_inr,
+            r.gross_revenue_inr / nullif(r.units, 0)                  AS asp_inr,
             100.0 * r.list_discount_inr / nullif(r.list_value_inr, 0) AS discount_depth_pct,
-            100.0 * f.units_shipped_ok / nullif(f.units_ordered, 0)   AS fill_rate_pct,
-            m.daily_spend_inr, m.daily_attributed_inr,
-            w.temp_max_c, w.rainfall_mm,
-            coalesce(c.is_holiday, false) AS is_holiday,
-            coalesce(c.holiday_name, '')  AS holiday_name
-        FROM (
-            SELECT date, region, iso_week,
-                   sum(units)                                       AS units,
-                   sum(units * unit_price_net) - sum(returns_value)  AS net_revenue_inr,
-                   sum(units * unit_price_net)                       AS gross_revenue_inr,
-                   sum(units * list_price)                           AS list_value_inr,
-                   sum(units * (list_price - unit_price_net))        AS list_discount_inr
-            FROM gold.fct_revenue_daily WHERE date BETWEEN $lo AND $hi
-            GROUP BY date, region, iso_week
-        ) r
-        {fulfilment}
-        {marketing}
-        {weather}
-        {calendar}
+            {fill}                                                    AS fill_rate_pct,
+            {spend}                                                   AS daily_spend_inr,
+            {attributed}                                              AS daily_attributed_inr,
+            {temperature}                                             AS temp_max_c,
+            {rainfall}                                                AS rainfall_mm,
+            {holiday}                                                 AS is_holiday,
+            {holiday_name}                                            AS holiday_name
+        FROM shares r
+        {" ".join(joins)}
         """
+
+
+_REVENUE_CTE = """revenue AS (
+    SELECT date, region, iso_week,
+           sum(units)                                      AS units,
+           sum(units * unit_price_net) - sum(returns_value) AS net_revenue_inr,
+           sum(units * unit_price_net)                      AS gross_revenue_inr,
+           sum(units * list_price)                          AS list_value_inr,
+           sum(units * (list_price - unit_price_net))       AS list_discount_inr
+    FROM gold.fct_revenue_daily
+    WHERE date BETWEEN $lo AND $hi
+    GROUP BY 1, 2, 3
+)"""
+
+_SHARES_CTE = """shares AS (
+    SELECT *,
+           net_revenue_inr / nullif(sum(net_revenue_inr) OVER (PARTITION BY date), 0)
+               AS region_share
+    FROM revenue
+)"""
+
+_FULFILMENT_CTE = """fulfilment AS (
+    SELECT date, region,
+           sum(units_shipped_ok) AS units_shipped_ok,
+           sum(units_ordered)    AS units_ordered
+    FROM gold.fct_fulfilment_daily WHERE date BETWEEN $lo AND $hi GROUP BY 1, 2
+)"""
+
+_MEDIA_CTE = f"""media AS (
+    SELECT iso_week,
+           sum(spend_inr) / {DAYS_PER_WEEK}              AS daily_spend_inr,
+           sum(attributed_revenue_inr) / {DAYS_PER_WEEK} AS daily_attributed_inr
+    FROM gold.fct_marketing_weekly WHERE date BETWEEN $lo AND $hi GROUP BY 1
+)"""
+
+_WEATHER_CTE = """weather AS (
+    SELECT date, region, avg(temp_max_c) AS temp_max_c, avg(rainfall_mm) AS rainfall_mm
+    FROM silver.weather_daily WHERE date BETWEEN $lo AND $hi GROUP BY 1, 2
+)"""
 
 
 def _fiscal_year(day: dt.date) -> str:

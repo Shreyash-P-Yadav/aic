@@ -870,3 +870,109 @@ Numbers worth keeping:
   revenue dip that never happened. A zero tolerance means the condition is impossible, so
   the rows cannot be true and are held. The rate is the finding either way, and it feeds
   the DQ score.
+
+---
+
+## P6 — Analytical engine: detection and the attribution ladder
+
+**Gate:** `make verify-p6` — 2026-08-29.
+
+```
+.venv/bin/pytest tests/statistical/test_p6_engine.py
+.......................                                                  [100%]
+23 passed in 622.22s (0:10:22)
+```
+
+`make lint` and `mypy --strict` clean (135 source files).
+
+### The credibility checkpoint
+
+```
+KS uniformity: statistic 0.0431, p = 0.7158 over 254 holdout days
+```
+
+Conformal p-values are uniform on clean holdout windows. Everything below depends on
+this: a confidence tier computed from p-values that are not uniform is decoration.
+
+### Measured
+
+```
+periods:   [(7, ACF 0.482, confirmed), (365, 0.072, rejected), (313, -0.042, rejected),
+            (4, 0.475, rejected)]
+whitening: AR(4) selected by AIC (-1321.0); Ljung-Box p = 0.633 (residuals are white)
+baseline:  OLS on log net_revenue: linear trend, 3 weekly and 3 annual Fourier pairs,
+           movable-event window [-12, +8] days, 3 exogenous controls; R^2 0.556
+scenario week (9-15 Mar 2026) delta -14.03%   (ledger counterfactual truth -11.94%)
+detected   2026-03-06  p = 0.0039  delta -40.3%   (outage window opens 2026-03-06)
+adtributor region=North   EP +0.507  surprise 0.00021  bootstrap stability 0.96
+           region=West    EP +0.188  surprise 0.00006  stability 0.02
+           region=South   EP +0.181  surprise 0.00003  stability 0.01
+           named cause: True; reported [region=North, channel=d2c_web]; coverage 0.685
+bennet     price -926,696  volume +22,614,746  mix +2,338,307   residual -3.35e-08
+price elasticity  -1.6315  (planted -1.94, 15.9% error); HAC CI (-3.007, -0.256)
+           diagnostics n=130; Ljung-Box p=0.125; Breusch-Pagan p=0.317; DW=2.63; max VIF=1.0
+media elasticity  naive 0.0217, DAG-specified 0.0662, planted 0.143
+```
+
+Note the Adtributor row that matters: the ledger records `true_top_region = North` for
+`EV-2026-0306-OUTAGE`, and rung 1 puts `region=North` at rank 1 with a bootstrap win
+rate of 0.96 against a 0.90 floor. Its nearest rival wins 2% of resamples.
+
+### The endogeneity demonstration — both numbers, as the prompt requires
+
+| Specification | Blended marketing elasticity |
+|---|---|
+| Naive OLS, media adstock alone | **0.0217** |
+| DAG-specified (price, fill, trend, annual Fourier; mediator `unit_volume` excluded) | **0.0662** |
+| Planted truth (sum of six channel elasticities) | **0.143** |
+
+The DAG-specified estimate is three times closer to truth than the naive one, and the
+gate asserts that improvement. **It does not assert recovery within ±20%, because that
+is not achieved** — see Known issues in `BUILD_PROGRESS.md`. The direction of the naive
+bias is *downward*, not upward as the build prompt anticipated: media budget is set as
+a share of revenue on a quarterly plan, so the omitted seasonal variation dominates the
+simultaneity bias from the tactical overlay (kappa = 0.30, pro-cyclical). Reported as
+measured.
+
+### What the gate caught, and what was fixed
+
+1. **A single unobserved day destroyed every detector in the system.** One national day
+   had no delivered OMS rows. `log(0)` clipped to `1e-9` gives a residual of about
+   minus thirty-eight, which enters the EWMA variance and inflates the scale by 38x for
+   months afterwards — measured 8.68 against a calibration mean of 0.227. Every genuine
+   anomaly after it standardised to about z = 0.03 and **nothing was ever detected**.
+   The failure is completely silent; it looks exactly like a quiet period. Unobserved
+   days are now marked NaN rather than clipped, and `whiten` scatters its innovations
+   back onto the full date axis so every mask still lines up.
+2. **The MSTL baseline followed the outage down.** A local trend smoother treats a
+   two-week outage as the level, so its residual over the event is small and the event
+   invisible: measured -7.3% against the ledger's -11.9%. Replaced as the primary
+   baseline by `RegressionBaseline` — a parametric trend, Fourier seasonality, and
+   **movable events as regressors** with a [-12, +8] day window, exactly as the design
+   requires. Measured -14.0%. MSTL is kept for period discovery and the seasonal
+   profile.
+3. **Period discovery confirmed lags 2 and 4 as seasonal periods.** A smooth series has
+   a significant ACF at *every* short lag; significance alone cannot distinguish a
+   cycle from autocorrelation. Discovery is now iterative — accept the strongest, remove
+   its seasonal component, re-test the rest — and requires a local ACF *peak*, not just
+   a value above the band. Only period 7 survives.
+4. **CUSUM ran on whitened innovations.** The whitening that makes a point test honest
+   removes exactly the persistence a CUSUM accumulates: a sustained shift has small
+   innovations after its first day. CUSUM now runs on the standardised residual.
+5. **A hard-coded AR(1) in the driver regression.** On a differenced target that is
+   over-differencing, and it cost 15 points of accuracy: AR(1) gives -1.34, ARMA(1,1)
+   by AIC gives -0.96, no AR term gives -1.63 against a planted -1.94. The estimator is
+   now a stated modelling decision — `sarimax` for a level target, `hac` for a
+   differenced one, with Newey-West's consistency under unspecified autocorrelation as
+   the reason — and both estimators are always fitted so the agreement score can report
+   the disagreement (0.588 here, which is itself the finding).
+6. **`unit_price_net > list_price`, again.** Not a P6 bug: this was P5's, and the P6
+   Bennet decomposition is what would have surfaced it as a nonsensical price effect.
+
+### Deviation recorded
+
+- **The blended marketing elasticity is not recovered within ±20%** (0.066 measured
+  against 0.143 planted). Recorded under Known issues with the identification argument
+  rather than tuned away. Every other planted quantity the gate checks — the weekly
+  period, the scenario magnitude, the top region, the Bennet identity, the price
+  elasticity — is recovered.
