@@ -2,9 +2,12 @@
 
 Three properties matter downstream:
 
-* **Three SKUs launch inside the window**, one of them 18 days before the demo's
-  "today". That is Scenario C — the sparse-history case where the engine must show
-  restraint rather than fire on a day-18 dip.
+* **Thirteen SKUs launch inside the window**, one of them 18 days before the demo's
+  "today". That last one is Scenario C — the sparse-history case where the engine
+  must show restraint rather than fire on a day-18 dip. The other twelve exist so the
+  pooled empirical-Bayes launch baseline has genuine comparables to borrow a shape
+  from: with one or two prior launches, "the pooled launch curve" would be a claim
+  rather than an estimate.
 * **Some SKUs are discontinued mid-history**, so the product master is a genuinely
   slowly-changing dimension rather than a static lookup.
 * **A handful of SKUs are intermittent** — slow movers with many zero days. At least
@@ -72,8 +75,8 @@ class ProductCatalog:
         config = self._config
         horizon = config.horizon
         launches_by_category: dict[str, list[Launch]] = {}
-        for launch in config.launches:
-            launches_by_category.setdefault(launch.category, []).append(launch)
+        for configured in config.launches:
+            launches_by_category.setdefault(configured.category, []).append(configured)
 
         skus: list[Sku] = []
         for category in config.categories:
@@ -88,7 +91,13 @@ class ProductCatalog:
                 / 365.25
                 / float(np.mean(category.ref_price_inr))
             )
-            in_window = launches_by_category.get(category.id, [])
+            # Each in-window launch for this category takes one SKU slot, assigned by
+            # position up front. Assigning by position (rather than popping from a
+            # list inside the loop) keeps every other SKU's attributes addressed by
+            # the same content key whether or not a launch was added to the config.
+            in_window = sorted(
+                launches_by_category.get(category.id, []), key=lambda item: item.launch_date
+            )
 
             for position in range(category.sku_count):
                 sku_id = f"SKU-{len(skus) + 1:04d}"
@@ -99,11 +108,10 @@ class ProductCatalog:
                 base_units = float(sizes[position] * category_units)
 
                 launch_date = horizon.start
-                is_in_window_launch = False
-                if in_window and position == 0:
-                    launch = in_window.pop(0)
+                launch: Launch | None = in_window[position] if position < len(in_window) else None
+                is_in_window_launch = launch is not None
+                if launch is not None:
                     launch_date = launch.launch_date
-                    is_in_window_launch = True
                     base_units *= launch.velocity_ratio
 
                 discontinued = None
@@ -115,7 +123,7 @@ class ProductCatalog:
                 skus.append(
                     Sku(
                         sku_id=sku_id,
-                        name=self._name_for(sku_id, category.id, is_in_window_launch),
+                        name=self._name_for(sku_id, category.id, launch),
                         category=category.id,
                         base_units=base_units,
                         ref_price_inr=round(ref_price, 2),
@@ -162,12 +170,10 @@ class ProductCatalog:
             for sku in skus
         ]
 
-    def _name_for(self, sku_id: str, category: str, is_launch: bool) -> str:
+    def _name_for(self, sku_id: str, category: str, launch: Launch | None) -> str:
         """A plausible fictional product name. Real brands are never referenced."""
-        if is_launch:
-            for launch in self._config.launches:
-                if launch.category == category:
-                    return launch.sku_name
+        if launch is not None:
+            return launch.sku_name
         rng = self._seeds("sku_name", sku_id)
         prefix = str(rng.choice(["Meridian", "Aurora", "PureCare", "Verdant", "Lumen", "Saral"]))
         form = {

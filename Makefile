@@ -18,7 +18,7 @@ BACKEND := backend
         typecheck typecheck-backend typecheck-frontend \
         test test-backend test-frontend \
         dev dev-backend dev-frontend build generate demo demo-reset \
-        validate-contracts \
+        validate-contracts generate-truth \
         verify-p0 verify-p1 verify-p2 verify-p3 verify-p4 verify-p5 verify-p6 \
         verify-p7 verify-p8 verify-p9 verify-p10 verify-p11 verify-p12 verify-all
 
@@ -92,6 +92,9 @@ build:  ## Production frontend build
 generate:  ## Generate the simulated world, events, sources and corpus
 	$(PY) -m insight_copilot.cli generate
 
+generate-truth:  ## Compute every planted event's true contribution -> data/ledger.parquet
+	$(PY) -m insight_copilot.cli generate-truth
+
 demo:  ## One command: generate, backfill, ingest, run, serve
 	$(PY) -m insight_copilot.cli demo
 
@@ -115,7 +118,7 @@ verify-p1:  ## P1 gate: contracts validate; compiler entitlements and audit hold
 verify-p2:  ## P2 gate: determinism first, then the realism suite
 	$(PYTEST) tests/statistical/test_p2_world.py
 
-verify-p3:
+verify-p3:  ## P3 gate: Shapley sums to the gap; Scenario A hits its target
 	$(PYTEST) tests/statistical/test_p3_truth.py
 
 verify-p4:

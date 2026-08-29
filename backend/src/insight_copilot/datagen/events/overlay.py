@@ -30,9 +30,14 @@ class DayEffects:
     """
 
     availability_cap: np.ndarray | None = None
-    """``(n_warehouses, n_skus)`` in [0, 1]: a ceiling on the fraction of on-hand
-    stock that can actually be picked. A conveyor failure is a cap, not a stockout:
-    the units exist, they cannot move."""
+    """``(n_warehouses, n_skus)`` in [0, 1]: a ceiling on the fraction of the day's
+    DEMAND this warehouse can pick and ship.
+
+    A throughput cap, not a stock cap. A conveyor failure does not consume inventory;
+    it limits how many units per day can move through the building. Capping a
+    fraction of *on-hand* would be inert at any normal level of cover — five weeks of
+    stock at 48% is still two and a half weeks of pickable units — which is precisely
+    the bug this wording exists to prevent."""
 
     price_multiplier: np.ndarray | None = None
     """``(n_skus, n_regions)`` multiplier on the effective selling price."""

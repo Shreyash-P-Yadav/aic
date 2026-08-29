@@ -52,8 +52,11 @@ def fulfil_day(
             continue
         home = int(home_row[region])
         ordered[home] += wanted
-        limit = inventory.on_hand[home] * (1.0 if cap is None else cap[home])
-        picked = inventory.pick(home, np.minimum(wanted, limit))
+        # The cap is on THROUGHPUT: how much of today's demand this site can move.
+        # Stock is untouched by an outage, so capping a fraction of on-hand would be
+        # inert at any normal level of cover.
+        servable = wanted if cap is None else np.floor(wanted * cap[home])
+        picked = inventory.pick(home, np.minimum(servable, inventory.on_hand[home]))
         shipped[home] += picked
         shortfall = wanted - picked
 
@@ -63,8 +66,9 @@ def fulfil_day(
             # Whole units transfer between DCs, so the inventory ledger stays
             # integral rather than accumulating fractional drift.
             allowed = np.floor(shortfall * CROSS_SERVE_PENALTY)
-            other_limit = inventory.on_hand[other] * (1.0 if cap is None else cap[other])
-            transferred = inventory.pick(other, np.minimum(allowed, other_limit))
+            if cap is not None:
+                allowed = np.floor(allowed * cap[other])
+            transferred = inventory.pick(other, np.minimum(allowed, inventory.on_hand[other]))
             ordered[other] += allowed
             shipped[other] += transferred
             shortfall = shortfall - transferred

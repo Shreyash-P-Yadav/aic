@@ -1,13 +1,13 @@
 # Build Progress
-Updated: 2026-08-29T02:05:14Z
-Current phase: P3
+Updated: 2026-08-29T06:35:21Z
+Current phase: P4
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
 | P0 | Bootstrap | DONE | `make verify-p0` | PASS | lint, mypy --strict, tsc, 5 unit tests, vite build all green; `GET /api/health` returns `{"status":"ok",...}`; vite dev serves a styled page with theme tokens compiled |
 | P1 | Contracts, security, audit | DONE | `make verify-p1` | PASS | 6 KPI + 11 source contracts validate; 40 tests green incl. the adversarial-injection and audit-completeness cases |
 | P2 | Datagen: world, latent, decisions, outcomes | DONE | `make verify-p2` | PASS | Determinism gate green (zero-magnitude event is byte-identical); 25 tests; annual Rs 853 cr, CV 0.230, AR(1) 0.394, ACF lag-7 0.332, BP 7.8e-10, LB 0.976, fill 0.985; generation 6.4 s |
-| P3 | Events and ground truth | PENDING | `make verify-p3` | — | |
+| P3 | Events and ground truth | DONE | `make verify-p3` | PASS | 19 tests; Shapley sums to the observed gap **bit-exactly** (0.000000000 INR residual across 113 groups); Scenario A moves -11.94% against a -12% target; 440 calibration events spread over all four axes; full ledger in 149 runs / 5m47s |
 | P4 | Source projection, defects, corpus | PENDING | `make verify-p4` | — | |
 | P5 | Landing zone, harness, ingestion | PENDING | `make verify-p5` | — | |
 | P6 | Engine: detection + attribution ladder | PENDING | `make verify-p6` | — | |
@@ -49,6 +49,48 @@ Current phase: P3
   list does not mention it, and `artifacts/eval_report.md` plus the screenshots are
   named deliverables in the definition of done. Generated *data* (`data/`,
   `landing/`, `*.duckdb`, `*.parquet`) is ignored as specified.
+- **P3 — counterfactuals are full re-runs, not warm-started windows.** The design
+  proposes re-simulating only `[event_start-60d, event_end+60d]`, warm-started from
+  the factual state, because a full re-run was assumed expensive. Here a full 36-month
+  run takes ~2.4 s, so a full re-run is both cheaper to reason about and *strictly
+  more correct*: there is no warm-start approximation to defend, and the
+  common-random-number property already guarantees the two worlds differ only by the
+  event.
+- **P3 — the windowing idea survives as batching across independent events.** Two
+  events that cannot reach each other's rows or each other's window can be removed in
+  the SAME counterfactual run and measured separately. That is what turns 641 naive
+  simulations into 149 (5m47s) for a 445-event ledger. It is the same insight as
+  windowing, applied to the run count rather than the day count.
+- **P3 — interaction is mechanism-specific, not a dimension intersection.** The first
+  attempt treated any overlap on any dimension as coupling, which chained 418 of 445
+  events into one group. Two events interact only through demand-and-substitution
+  (same region AND category), inventory (same warehouse, region, category and SKUs),
+  or media adstock (same channel and region). Everything else is independent whatever
+  the calendar says.
+- **P3 — the ledger job streams panels instead of holding them.** The first full run
+  was killed by the OOM killer at run 85: 149 simulated worlds is about 25 GB. Each
+  run is now consumed as it is produced — coalition scalars read off, segment
+  measurements taken against the factual world, panel dropped — so peak memory is two
+  panels.
+- **P3 — effects are measured within the event's own scope as well as nationally.**
+  A calibration event confined to one region-category moves ~5% of the company, so a
+  25% hit inside its scope reads as 0.2% nationally. Since the engine scans KPI x
+  segment, recording only the national number would make the corpus look like 440
+  immaterial events. Measured scope-relative spread: p05 0.43%, p50 2.80%, p95 11.6%.
+- **P3 — Scenario A's outage is deeper than the architecture doc's illustration.**
+  That document has DC-North's fill rate falling to 81.4% AND costing -7.1pp of
+  national revenue. Those are not consistent in this world: DC-North serves ~26% of
+  revenue and DC-West cross-serves part of any shortfall, so 81.4% costs about
+  -2.5pp. To reach the -12% target the outage has to bite harder; the measured
+  DC-North fill rate for the week is **35.2%**, reported as measured rather than as
+  the document's figure.
+- **P3 — Scenario B moved from 13 Apr to late March 2026.** The data-layer design
+  dates it 13 Apr, which is after `SIM_TODAY` (29 Mar) and so would not be visible in
+  the demo. The MarTech drop due Mon 23 Mar is the one that never arrives.
+- **P3 — twelve extra in-window launches were added to the world.** Scenario C rests
+  on a *pooled* launch baseline, and with one or two prior launches "the pooled launch
+  curve" would be a claim rather than an estimate. Thirteen SKUs now launch inside the
+  window; twelve of them are history for the thirteenth.
 - **P2 — `simulate.py` split into six modules to stay under the 400-line limit.**
   It first came in at 638 lines. Split into `simulate.py` (360), `state.py` (129),
   `precompute.py` (113), `latent/demand.py` (91), `outcomes/fulfilment.py` (82) and
@@ -131,7 +173,29 @@ Current phase: P3
 
 ## Phase plans
 
-### P3 plan (next)
+### P4 plan (next)
+
+1. `datagen/projection/` — eleven `SourceProjector` subclasses. Full fidelity: OMS
+   (order-line-day), WMS (T+2), MarTech (weekly Mon, 14-day restatement, 12-month
+   history), support tickets (continuous, text + PII), competitor prices (weekly,
+   3-day lag, ~60% SKU coverage, fuzzy match with a confidence score). Lightweight:
+   PIM, inventory snapshots, weather, holiday calendar. Corpus-only: news, pricing memos.
+2. The **designed disagreements** from DataLayer §5: OMS vs ERP definition gap,
+   MarTech attributed vs order-linked revenue (5-15% normally, **18% in Scenario B**),
+   WMS vs OMS cut-off, competitor match error.
+3. `datagen/defects/` — one `DefectInjector` per pathology **P1-P30**, each
+   self-registering in a catalog and individually toggleable.
+4. `datagen/corpus/` — 600-800 documents generated FROM the event ledger. Templates
+   for routine documents; the ~150 scenario-critical ones generated once and committed
+   as fixtures in `tests/fixtures/corpus/`. Enforce the corpus rules: ~15% of events
+   get no document, ~10% contradictory pairs, 3-6 outlet syndication, ~20% with a
+   later effective date, ~8% post-dated decoys. PII realistic in format but never real.
+5. `tests/integration/test_p4_projection.py` — the gate: a test per defect asserting
+   it is present and detectable (P8 silent unit change and P26 syndication get named
+   tests); reconciliation deltas in their designed ranges; corpus composition within
+   tolerance; no real-looking personal identifiers.
+
+### P3 plan (done)
 
 1. `datagen/events/models.py` — the event schema from DataLayer §8 (event_id, type,
    scope, window, magnitude, detectability, evidence spec, ground_truth spec,

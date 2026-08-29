@@ -10,7 +10,7 @@
 # Fitted once so the simulated business lands on its stated revenue scale. It changes
 # the SIZE of the company and nothing else - no elasticity, shape, noise property or
 # correlation depends on it. Held constant across factual and counterfactual runs.
-demand_scale: 0.9442
+demand_scale: 0.9641
 
 company:
   name: "Meridian Consumer Brands"
@@ -310,8 +310,24 @@ competitor:
   match_confidence: {mean: 0.85, sd: 0.09}
 
 launches:
-  # Three SKUs launch inside the window. "Aurora X" is Scenario C: 18 days of
-  # history at SIM_TODAY, with a days-15-20 dip that is INSIDE the pooled band.
-  - {sku_name: "Aurora X Serum",        category: Skincare,       launch_date: "2026-03-11", velocity_ratio: 1.42}
-  - {sku_name: "Meridian Cedar Mist",   category: Home Fragrance, launch_date: "2025-08-19", velocity_ratio: 0.88}
-  - {sku_name: "PureCare Baby Balm",    category: Baby,           launch_date: "2024-11-05", velocity_ratio: 1.06}
+  # Thirteen SKUs launch inside the window. Twelve of them are HISTORY: they exist so
+  # the pooled empirical-Bayes launch baseline has real comparables to borrow a shape
+  # from. With only one or two prior launches the "pooled launch curve" would be a
+  # claim rather than an estimate, and Scenario C's whole point is that the engine
+  # shows restraint because it has something honest to compare against.
+  #
+  # "Aurora X Serum" is Scenario C: launched 11 Mar 2026, so it has 18 days of history
+  # at SIM_TODAY, with a days-15-20 dip that sits INSIDE the pooled band.
+  - {sku_name: "Aurora X Serum",         category: Skincare,       launch_date: "2026-03-11", velocity_ratio: 1.42}
+  - {sku_name: "Meridian Cedar Mist",    category: Home Fragrance, launch_date: "2025-08-19", velocity_ratio: 0.88}
+  - {sku_name: "PureCare Baby Balm",     category: Baby,           launch_date: "2024-11-05", velocity_ratio: 1.06}
+  - {sku_name: "Verdant Rice Water Rinse", category: Haircare,     launch_date: "2024-02-13", velocity_ratio: 1.18}
+  - {sku_name: "Lumen Niacinamide Serum",  category: Skincare,     launch_date: "2024-05-21", velocity_ratio: 0.94}
+  - {sku_name: "Saral Citrus Floor Gel",   category: Surface Care, launch_date: "2024-08-06", velocity_ratio: 1.31}
+  - {sku_name: "Meridian Shea Body Butter", category: Bodycare,    launch_date: "2024-10-15", velocity_ratio: 0.79}
+  - {sku_name: "Aurora Vetiver Diffuser",  category: Home Fragrance, launch_date: "2025-01-14", velocity_ratio: 1.09}
+  - {sku_name: "PureCare Gentle Baby Wash", category: Baby,        launch_date: "2025-03-25", velocity_ratio: 0.86}
+  - {sku_name: "Verdant Amla Shampoo",     category: Haircare,     launch_date: "2025-05-13", velocity_ratio: 1.24}
+  - {sku_name: "Lumen Ceramide Cream",     category: Skincare,     launch_date: "2025-07-08", velocity_ratio: 1.02}
+  - {sku_name: "Saral Bathroom Foam",      category: Surface Care, launch_date: "2025-09-16", velocity_ratio: 0.91}
+  - {sku_name: "Meridian Kokum Lotion",    category: Bodycare,     launch_date: "2025-11-18", velocity_ratio: 1.15}

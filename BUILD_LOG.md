@@ -356,3 +356,146 @@ module changed nothing.
   out to produce the required >40% zero-day series (12 SKUs qualify) without a
   separate Poisson path. Kept for the count-KPI branch of the adaptation matrix.
 
+---
+
+## P3 — Events and ground truth · DONE
+
+**Built.**
+
+- `datagen/events/models.py` — the event schema from DataLayer §8. Magnitude is a
+  **discriminated union** (outage / media shift / price change / demand shock / bulk
+  order / none), so a scenario YAML with a misspelled magnitude key fails at load
+  rather than being silently ignored by the overlay. `EventScope.may_interact_with`
+  encodes the three real couplings in this world — demand-and-substitution, inventory,
+  media adstock — and nothing else.
+- `datagen/events/effects.py` — `LedgerOverlay`, the only translation from "an event
+  happened" to "the world was different". Per-day effect arrays cached on the tuple of
+  active event ids.
+- `datagen/events/ledger.py`, `build.py` — loading, indexing, and one entry point that
+  assembles scenarios + ambient + calibration so the CLI, the truth job and the tests
+  see the same world.
+- **The four scenarios**, hand-authored in `events/scenarios/`:
+  **A** DC-North outage + paid-social cut + Haircare price rise, week of 9 Mar 2026,
+  plus a post-dated competitor decoy; **B** two `data_incident` events with `none`
+  magnitude — nothing is wrong with the business, only with what we know about it;
+  **C** the Aurora X launch promo whose day-14 expiry produces the day-15-to-20 dip;
+  **D** entitlement, which plants no data at all because the demo happens in the
+  compiler.
+- `datagen/events/ambient.py` — 89 routine background events, deliberately below the
+  materiality floors so *not* firing on them is a measurable property.
+- `datagen/events/calibration_gen.py` — 440 events laid out in non-interacting
+  `(region, category)` lanes, spread over the four axes that move the confidence score.
+- `datagen/truth/` — `measure.py` (national and **scope-relative** effect, true top
+  segment), `counterfactual.py` (full re-runs plus interaction grouping),
+  `shapley.py` (exact, additive, order-independent, with the arithmetic separated from
+  the simulation), `planner.py` (batched run scheduling), `ledger_writer.py`
+  (streaming execution and `data/ledger.parquet`).
+- `make generate-truth` wired to the CLI.
+
+**Gate:** `make verify-p3` — exit code 0.
+
+```
+.venv/bin/pytest tests/statistical/test_p3_truth.py
+...................                                                      [100%]
+19 passed in 59.25s
+```
+
+All 19 tests, named:
+
+```
+tests/statistical/test_p3_truth.py::test_shapley_contributions_sum_to_the_observed_gap PASSED [  5%]
+tests/statistical/test_p3_truth.py::test_one_at_a_time_deltas_do_not_sum_and_shapley_does PASSED [ 10%]
+tests/statistical/test_p3_truth.py::test_every_scenario_a_event_carries_a_contribution PASSED [ 15%]
+tests/statistical/test_p3_truth.py::test_scenario_a_moves_revenue_by_about_twelve_percent PASSED [ 21%]
+tests/statistical/test_p3_truth.py::test_the_outage_shows_up_as_a_fill_rate_collapse_at_dc_north PASSED [ 26%]
+tests/statistical/test_p3_truth.py::test_the_calibration_corpus_has_at_least_four_hundred_events PASSED [ 31%]
+tests/statistical/test_p3_truth.py::test_scenario_events_are_tagged_for_exclusion_from_the_fit PASSED [ 36%]
+tests/statistical/test_p3_truth.py::test_the_corpus_spreads_magnitude PASSED [ 42%]
+tests/statistical/test_p3_truth.py::test_the_corpus_spreads_segment_concentration PASSED [ 47%]
+tests/statistical/test_p3_truth.py::test_the_corpus_spreads_evidence_availability PASSED [ 52%]
+tests/statistical/test_p3_truth.py::test_the_corpus_spreads_data_condition PASSED [ 57%]
+tests/statistical/test_p3_truth.py::test_the_ground_truth_plan_is_affordable PASSED [ 63%]
+tests/statistical/test_p3_truth.py::test_events_far_apart_and_disjoint_in_scope_are_independent PASSED [ 68%]
+tests/statistical/test_p3_truth.py::test_scenario_b_is_a_data_incident_with_no_mechanical_effect PASSED [ 73%]
+tests/statistical/test_p3_truth.py::test_scenario_c_launch_has_eighteen_days_of_history_at_sim_today PASSED [ 78%]
+tests/statistical/test_p3_truth.py::test_scenario_d_plants_no_data_at_all PASSED [ 84%]
+tests/statistical/test_p3_truth.py::test_the_post_dated_decoy_lands_after_the_effect_it_would_explain PASSED [ 89%]
+tests/statistical/test_p3_truth.py::test_the_ground_truth_ledger_is_written_and_exact PASSED [ 94%]
+tests/statistical/test_p3_truth.py::test_an_event_removed_from_the_overlay_leaves_no_trace PASSED [100%]
+```
+
+**Measured numbers:**
+
+```
+SCENARIO A — week commencing Mon 9 Mar 2026, national net revenue
+  counterfactual (no events)   Rs   15.523 cr
+  factual                      Rs   13.669 cr
+  observed gap                 Rs   -1.854 cr   (-11.94%, target -12.0% +/- 1pp)
+
+  Shapley contributions (8 runs, total effect incl. operational feedback):
+    DC-North conveyor outage     Rs  -0.961 cr  ( -6.19 pp)
+    Paid-social cut (24 Feb)     Rs  -0.585 cr  ( -3.77 pp)
+    Haircare +8% list price      Rs  -0.308 cr  ( -1.99 pp)
+    SUM OF CONTRIBUTIONS         Rs  -1.854 cr
+    OBSERVED GAP                 Rs  -1.854 cr
+    residual                     Rs 0.0000000000  (exact)
+
+  naive one-at-a-time sum      Rs  -1.779 cr
+  interaction Shapley absorbs   Rs  +0.075 cr  (4.05% of the gap)
+
+  DC-North fill rate 6-12 Mar: 0.9939 -> 0.3524
+
+EVENT LEDGER: 537 events (8 scenario, 89 ambient, 440 calibration)
+  magnitude spread   {'high': 185, 'low': 102, 'medium': 153}
+  concentration      sku-level 138, single-region 224, diffuse 78
+  evidence           gaps(0 docs) 59 (13.4%), decoys 29, contradictions 29
+  data condition     {'reconciliation_breach': 72, 'clean': 213, 'restatement_open': 72, 'stale_feed': 83}
+
+GROUND-TRUTH PLAN: 445 events -> 123 interaction groups -> 149 simulation runs (~6.5 min)
+  without batching that would be 641 runs
+```
+
+**The full ground-truth ledger** (`make generate-truth`, 5 min 47 s):
+
+```
+ledger.parquet: 445 rows x 31 columns
+by set: {'calibration': 440, 'scenario': 5}
+group methods: {'one_at_a_time': 305, 'shapley_within_window': 140}
+interaction groups: 123  (sizes {1: 94, 2: 14, 3: 3, 4: 1, 5: 1, 11: 1, 13: 1, 17: 1, 18: 1, 22: 1, 25: 1, 32: 1, 41: 1, 46: 1, 80: 1})
+
+SHAPLEY groups: 113   max |sum-total| = 0.000000000 INR   max relative = 0.00e+00
+ONE-AT-A-TIME groups: 10  median reported residual (relative) 4.487
+
+calibration |scoped delta %|: p05  0.43  p25  1.27  p50  2.80  p75  6.10  p95 11.56  max 18.88
+calibration |national delta %|: p50  0.23  p95  1.44
+material within scope (>=2%): 275 of 440
+
+Scenario A:
+               event_id group_id    mechanism  true_contribution_inr  scoped_delta_pct true_top_region true_top_category
+  EV-2026-0224-MEDIACUT    G0080  media_shift          -3.090775e+07         -2.974479           North          Haircare
+ EV-2026-0301-PRICERISE    G0080 price_change          -8.400380e+07         -8.135417            West          Haircare
+    EV-2026-0306-OUTAGE    G0080       outage          -1.650109e+07         -7.340346           North          Haircare
+EV-2026-0316-COMPETITOR    G0080 demand_shock          -4.779910e+06         -1.892389           North          Haircare
+```
+
+The Shapley identity holds **bit-exactly** across all 113 Shapley groups:
+`max |sum of contributions − group total| = 0.000000000 INR`. The gate asks for 1%.
+
+**Decisions taken in this phase** are recorded in `BUILD_PROGRESS.md`; the two that
+matter most are that counterfactuals are **full re-runs rather than warm-started
+windows**, and that the *windowing* idea survives as **batching across independent
+events**, which is what turns 641 naive simulations into 149.
+
+**Deferred.**
+
+- **Direct effect (downstream decisions frozen).** The ledger records the **total**
+  effect only — the full re-run including operational feedback, which is what the
+  engine is scored against and what a CFO means by "what did it cost us". Recording
+  the direct effect as well needs the simulator to replay a captured decision trace
+  (weekly media spend and replenishment orders) instead of recomputing them, which is
+  a change to the day loop rather than to the truth layer. Nothing in P4–P11 consumes
+  it; it is a pitch nicety, not a gate requirement.
+- **`ambient` events carry no computed ground truth.** They exist to be correctly
+  ignored, so their true contribution is never consumed; computing it would add ~89
+  events to a job that is already the most expensive step in the build.
+

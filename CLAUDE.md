@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P3 — Events and ground truth.** P0–P2 are DONE.
+**P4 — Source projection, defects, corpus.** P0–P3 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -106,6 +106,7 @@ make install          venv + npm install            make lint        ruff + esli
 make typecheck        mypy --strict + tsc           make test        pytest + vitest
 make dev              backend :8000 + frontend :5173
 make generate         build the simulated world     make demo        full one-command demo
+make generate-truth   counterfactual ground truth (~6 min) -> data/ledger.parquet
 make validate-contracts
 make verify-pN        the gate for phase N          make verify-all  every gate in order
 ```

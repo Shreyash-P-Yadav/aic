@@ -103,14 +103,14 @@ class Simulator:
             price_plan=self.price_plan,
             seeds=self.seeds,
         )
-        logger.info(
+        logger.debug(
             "datagen.simulate.start",
             days=self.calendar.n_days,
             cells=self.assortment.n_cells,
             overlay=events.describe(),
         )
         panel = self._loop(pre, events)
-        logger.info(
+        logger.debug(
             "datagen.simulate.done",
             revenue_cr=round(float(panel.net_revenue_by_day().sum()) / 1e7, 1),
             fill_rate=round(float(np.nanmean(panel.national_fill_rate())), 4),

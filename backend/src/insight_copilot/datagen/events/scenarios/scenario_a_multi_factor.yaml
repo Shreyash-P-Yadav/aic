@@ -1,0 +1,105 @@
+# Scenario A — the centrepiece. Three overlapping causes in one week, which is what
+# makes the Shapley ground truth necessary: one-at-a-time counterfactuals do not sum
+# to the total when a stockout suppresses the volume marketing would otherwise have
+# driven.
+#
+# Target: about -12% weekly net revenue for the week commencing Mon 9 Mar 2026.
+# The three magnitudes below were tuned against this simulator to land there; the
+# MEASURED split is whatever the counterfactual says, and that is what the ledger
+# records. Measured total at these settings: -11.94%.
+#
+# Honest note on the outage depth. The architecture document's illustrative table has
+# DC-North's fill rate falling 96.2% -> 81.4% and costing -7.1pp of national revenue.
+# Those two numbers are not consistent with THIS world: DC-North serves about 26% of
+# national revenue and DC-West cross-serves part of any shortfall, so an 81.4% fill
+# rate costs about -2.5pp, not -7.1pp. To reach the -12% target the outage has to be
+# deeper, and the measured DC-North fill rate for the week is 35.2%. That is a severe
+# but coherent conveyor failure - a site running at roughly a third of throughput for
+# a week - and it is reported as measured rather than as the document's figure.
+
+- event_id: EV-2026-0306-OUTAGE
+  type: outage
+  event_set: scenario
+  description: >
+    Conveyor failure at DC-North. The site can move only 36% of the day's demand for
+    the duration. Stock is present and untouched - this is a THROUGHPUT cap, not a
+    stockout - and DC-West cross-serves part of the shortfall, which is why the
+    revenue effect is materially smaller than the fill-rate effect. Separating those
+    two is one of the things the attribution ladder has to get right.
+  scope:
+    warehouses: [DC-North]
+  window: {start: 2026-03-06, end: 2026-03-12}
+  magnitude: {kind: outage, pick_capacity: 0.36}
+  detectability: high
+  evidence:
+    documents: 3
+    contradiction: true
+    syndication: 1
+    post_dated_decoy: false
+  ground_truth: {compute: true, method: shapley_within_window}
+  demo_role: scenario_A_primary
+
+- event_id: EV-2026-0224-MEDIACUT
+  type: media_shift
+  event_set: scenario
+  description: >
+    Paid-social spend cut to 22% of plan as a pilot. It reaches demand through a
+    7-day-half-life adstock, so its effect is still building when the outage lands -
+    the lagged cause the timing gate has to accept and the naive "what changed this
+    week?" scan would miss entirely.
+  scope:
+    media_channels: [paid_social]
+  window: {start: 2026-02-24, end: 2026-03-22}
+  magnitude: {kind: media_shift, spend_multiplier: 0.22}
+  detectability: medium
+  evidence:
+    documents: 2
+    contradiction: false
+    syndication: 1
+    post_dated_decoy: false
+  ground_truth: {compute: true, method: shapley_within_window}
+  demo_role: scenario_A_media
+
+- event_id: EV-2026-0301-PRICERISE
+  type: price_change
+  event_set: scenario
+  description: >
+    Category-wide list-price revision of +8% on Haircare, roughly 29% of revenue.
+    The gross price effect is positive; the elasticity-induced volume response is
+    negative. Reporting only one of the two is the classic attribution error, and the
+    Bennet decomposition is what stops it.
+  scope:
+    categories: [Haircare]
+  window: {start: 2026-03-01, end: 2026-08-31}
+  magnitude: {kind: price_change, price_multiplier: 1.08}
+  detectability: medium
+  evidence:
+    documents: 2
+    contradiction: false
+    syndication: 1
+    post_dated_decoy: false
+    effective_date_offset_days: 24
+  ground_truth: {compute: true, method: shapley_within_window}
+  demo_role: scenario_A_price
+
+- event_id: EV-2026-0316-COMPETITOR
+  type: competitor_action
+  event_set: scenario
+  description: >
+    A dramatic competitor launch announcement, four days AFTER the revenue drop it
+    would appear to explain. Topically relevant, widely syndicated, and impossible:
+    the timing gate must eliminate it. This is the red herring, and it carries a real
+    but small demand effect so that removing it from the hypothesis set is a decision
+    rather than a no-op.
+  scope:
+    categories: [Haircare]
+  window: {start: 2026-03-16, end: 2026-04-15}
+  magnitude: {kind: demand_shock, demand_multiplier: 0.97}
+  detectability: low
+  evidence:
+    documents: 5
+    contradiction: false
+    syndication: 5
+    post_dated_decoy: true
+  ground_truth: {compute: true, method: counterfactual}
+  demo_role: scenario_A_decoy

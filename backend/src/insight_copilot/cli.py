@@ -63,6 +63,34 @@ def _cmd_validate_contracts(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_generate_truth(_: argparse.Namespace) -> int:
+    """Compute every planted event's true causal contribution and write the ledger.
+
+    The expensive step in the whole build: one full simulation per planned
+    counterfactual. Independent events share runs, so the 448-event ledger costs
+    about 150 simulations rather than about 900.
+    """
+    from insight_copilot.datagen.events.build import build_full_ledger
+    from insight_copilot.datagen.simulate import Simulator
+    from insight_copilot.datagen.truth.ledger_writer import GroundTruthComputer, write_ledger
+
+    cfg = get_settings()
+    cfg.ensure_dirs()
+    try:
+        simulator = Simulator.from_defaults(cfg.seed)
+        ledger = build_full_ledger(simulator.config, simulator.catalog, simulator.seeds)
+        truth = GroundTruthComputer(simulator, ledger.events).compute()
+        path = write_ledger(truth, cfg.data_dir)
+    except SimulationError as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+    print(truth.summary())
+    print(f"      -> {path}")
+    return 0
+
+
 def _cmd_generate(_: argparse.Namespace) -> int:
     """Simulate the world and write the L3 truth tables."""
     import time
@@ -93,6 +121,7 @@ COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
     "generate": _cmd_generate,
+    "generate-truth": _cmd_generate_truth,
     "backfill": _not_yet("P5"),
     "run": _not_yet("P6"),
     "backtest": _not_yet("P11"),
