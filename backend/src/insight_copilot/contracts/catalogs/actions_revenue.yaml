@@ -1,0 +1,44 @@
+# Governed action catalog for the revenue domain. Referenced by net_revenue,
+# unit_volume and gross_margin_pct.
+catalog_id: actions_revenue
+domain: revenue
+actions:
+  - id: reverse_price_increase
+    driver: price_index
+    lever: pricing
+    title: "Reverse or phase the price increase on the affected SKUs"
+    description: >
+      Roll the list price back to its prior level, or phase the increase over two
+      months, on the SKUs and regions the ladder identifies. The elasticity is the
+      estimated own-price elasticity with its interval, not the planning assumption.
+    preconditions:
+      - {metric: price_index, comparison: above, value: 1.02, scope: segment}
+    elasticity_driver: price_index
+    effect_fraction: 1.00
+    owner_role: pricing_committee
+    approval_threshold_inr: 10000000
+    monitoring:
+      kpi: net_revenue
+      checkpoint_days: [7, 14, 28]
+      success_threshold_pct: 100.0
+    lead_time_days: 7
+
+  - id: targeted_promotion_in_affected_segment
+    driver: price_index
+    lever: pricing
+    title: "Run a targeted promotion in the affected segment"
+    description: >
+      A bounded depth promotion limited to the segment the ladder names, to recover
+      volume without repricing the whole book.
+    preconditions:
+      - {metric: discount_depth_pct, comparison: below, value: 25.0, scope: segment}
+      - {metric: gross_margin_pct, comparison: above, value: 35.0, scope: segment}
+    elasticity_driver: price_index
+    effect_fraction: 0.45
+    owner_role: category_manager
+    approval_threshold_inr: 4000000
+    monitoring:
+      kpi: net_revenue
+      checkpoint_days: [7, 14]
+      success_threshold_pct: 100.0
+    lead_time_days: 3

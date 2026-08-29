@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P7 — Evidence, confidence, actions.** P0–P6 are DONE.
+**P8 — LLM layer and verifiers.** P0–P7 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -67,7 +67,8 @@ backend/src/insight_copilot/
               gold panel freshness reconcile runner policies masking models
   engine/     series periods baseline regression_baseline residuals detect gate
               cube attribute_where attribute_kind attribute_why design dataset
-              evidence confidence actions bundle
+              evidence confidence calibration actions bundle pipeline
+  contracts/catalogs/  governed action catalogs (revenue, supply, marketing)
   llm/        provider planner hypotheses narrate verify_numbers verify_entailment
               templates router
   learning/   feedback ranker calibrate case_library

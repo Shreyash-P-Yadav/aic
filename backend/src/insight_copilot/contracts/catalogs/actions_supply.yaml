@@ -1,0 +1,49 @@
+# Governed action catalog for the supply domain. Referenced by order_fill_rate.
+#
+# An action is only ever proposed when its declared driver is the one the ladder
+# found, its preconditions hold against live data, and the confidence tier permits a
+# recommendation at all. The expected impact is computed from the estimated elasticity
+# with its interval propagated - never a point estimate, and never a number a model
+# produced.
+catalog_id: actions_supply
+domain: supply
+actions:
+  - id: reroute_to_cross_serving_dc
+    driver: fill_rate
+    lever: replenishment
+    title: "Reroute affected demand to the cross-serving DC"
+    description: >
+      Shift the failed DC's allocation to the DCs that already list its regions in
+      their service map, accepting the cross-serve cost penalty for the duration.
+    preconditions:
+      - {metric: fill_rate_pct, comparison: below, value: 85.0, scope: warehouse}
+      - {metric: cross_serve_headroom_pct, comparison: above, value: 10.0, scope: warehouse}
+    elasticity_driver: fill_rate
+    effect_fraction: 0.55
+    owner_role: supply_chain_director
+    approval_threshold_inr: 5000000
+    monitoring:
+      kpi: order_fill_rate
+      checkpoint_days: [1, 3, 7]
+      success_threshold_pct: 92.0
+    lead_time_days: 1
+
+  - id: expedite_inbound_replenishment
+    driver: fill_rate
+    lever: replenishment
+    title: "Expedite inbound replenishment for the short SKUs"
+    description: >
+      Air-freight or priority-road the top short-listed SKUs into the affected DC.
+      Costly per unit and only worth it while the shortfall is concentrated.
+    preconditions:
+      - {metric: fill_rate_pct, comparison: below, value: 90.0, scope: warehouse}
+      - {metric: days_cover, comparison: below, value: 14.0, scope: warehouse}
+    elasticity_driver: fill_rate
+    effect_fraction: 0.30
+    owner_role: supply_chain_director
+    approval_threshold_inr: 2500000
+    monitoring:
+      kpi: order_fill_rate
+      checkpoint_days: [3, 7, 14]
+      success_threshold_pct: 95.0
+    lead_time_days: 3

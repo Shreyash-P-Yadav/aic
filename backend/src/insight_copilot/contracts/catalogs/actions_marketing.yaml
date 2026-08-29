@@ -1,0 +1,43 @@
+# Governed action catalog for the marketing domain.
+catalog_id: actions_marketing
+domain: marketing
+actions:
+  - id: restore_paid_social_budget
+    driver: marketing_adstock
+    lever: media_budget
+    title: "Restore the paid-social budget to plan"
+    description: >
+      Reverse the in-quarter cut on the channel whose adstock the ladder attributes the
+      movement to, phased over one week so the platform's learning phase is not reset.
+    preconditions:
+      - {metric: daily_spend_inr, comparison: below, value: 0.7, scope: channel_vs_plan}
+    elasticity_driver: marketing_adstock
+    effect_fraction: 0.80
+    owner_role: marketing_lead
+    approval_threshold_inr: 3000000
+    monitoring:
+      kpi: blended_roas
+      checkpoint_days: [7, 14, 28]
+      success_threshold_pct: 100.0
+    lead_time_days: 2
+
+  - id: reallocate_to_efficient_channels
+    driver: marketing_adstock
+    lever: media_budget
+    title: "Reallocate spend towards the higher-elasticity channels"
+    description: >
+      Move budget from the channels whose estimated elasticity is lowest to those whose
+      interval is comfortably above them. Only proposed when the estimates are
+      separately identifiable, which the VIF grouping decides.
+    preconditions:
+      - {metric: estimator_agreement, comparison: above, value: 0.7, scope: model}
+      - {metric: max_vif, comparison: below, value: 5.0, scope: model}
+    elasticity_driver: marketing_adstock
+    effect_fraction: 0.35
+    owner_role: marketing_lead
+    approval_threshold_inr: 1500000
+    monitoring:
+      kpi: blended_roas
+      checkpoint_days: [14, 28]
+      success_threshold_pct: 100.0
+    lead_time_days: 5

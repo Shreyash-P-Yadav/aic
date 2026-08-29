@@ -976,3 +976,76 @@ measured.
   rather than tuned away. Every other planted quantity the gate checks — the weekly
   period, the scenario magnitude, the top region, the Bennet identity, the price
   elasticity — is recovered.
+
+---
+
+## P7 — Evidence, confidence, actions
+
+**Gate:** `make verify-p7` — 2026-08-29.
+
+```
+.venv/bin/pytest tests/integration/test_p7_evidence.py
+.................                                                        [100%]
+17 passed in 49.86s
+```
+
+`make lint` and `mypy --strict` clean (141 source files).
+
+### The seventeen assertions
+
+Four of them are refusals, and each refuses for a different named reason.
+
+Abstention
+1. `test_scenario_b_abstains_through_the_data_trust_gate` — a required source past its
+   SLA forces `Insufficient`; `c4` falls and the failed check names `martech_weekly`.
+2. `test_a_reconciliation_breach_also_forces_abstention`
+3. `test_a_zero_evidence_scenario_abstains_through_the_sufficiency_gate`
+4. `test_an_abstention_is_a_designed_output_not_an_error` — movement, knowns, failed
+   checks, missing evidence, retry trigger, ETA and the freshness that caused it.
+
+The insight
+5. `test_a_healthy_run_produces_a_bundle_with_actions`
+6. `test_every_narratable_number_is_in_the_bundle`
+7. `test_the_bundle_carries_lineage_and_freshness`
+
+Sparse history
+8. `test_scenario_c_is_not_flagged_and_names_its_own_sample_size` — `c3` reads
+   "n = 18 against a 28-day floor for full statistics", and the calibrated score is
+   strictly below the same run with full history.
+
+Evidence
+9. `test_the_post_dated_decoy_is_eliminated_by_the_timing_gate`
+10. `test_syndicated_copies_count_as_one_independent_source`
+11. `test_a_document_is_matched_on_its_effective_date_not_its_publish_date`
+
+Confidence
+12. `test_softmin_is_dominated_by_the_weakest_signal`
+13. `test_calibration_reports_itself_as_unfitted_until_a_backtest_exists`
+14. `test_any_signal_below_the_contract_floor_forces_insufficient`
+
+Actions
+15. `test_actions_are_suppressed_at_low_and_insufficient`
+16. `test_expected_impact_carries_its_interval_never_a_point`
+17. `test_an_action_whose_precondition_fails_is_not_proposed`
+
+### What the gate caught
+
+1. **BM25 gave documents a negative evidence confidence.** BM25's IDF term goes
+   negative for a word carried by more than half the corpus, so six near-identical
+   syndicated copies each scored **-0.37**. That number would have reached a card,
+   where it means nothing and reads as something. Rerank is now normalised against the
+   best *positive* score and the composite is clamped to [0, 1].
+2. **An action was proposed on preconditions that could not be evaluated.** The code
+   skipped an action whose preconditions *failed* but proposed one whose preconditions
+   were simply absent from the observed metrics. An unevaluable precondition is not a
+   satisfied one, and the docstring already said so; the code now agrees with it.
+
+### Measured — the healthy Scenario A run
+
+```
+confidence.scored  composite 0.9187  calibrated 0.9187  tier High  gates []
+```
+
+The composite equals the calibrated score because the isotonic map is **unfitted**, and
+the bundle carries `calibration_fitted = false` so nothing downstream can present a raw
+score as a probability. P11 fits it on a real backtest.

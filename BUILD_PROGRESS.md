@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T20:30:00Z
-Current phase: P7
+Updated: 2026-08-29T21:40:00Z
+Current phase: P8
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -11,7 +11,7 @@ Current phase: P7
 | P4 | Source projection, defects, corpus | DONE | `make verify-p4` | PASS | 52 tests; 11 source extracts validated against their contracts; **31/31 pathologies present and detectable**; 704 documents; all four reconciliation deltas in their designed ranges; no real-looking PII anywhere |
 | P5 | Landing zone, harness, ingestion | DONE | `make verify-p5` | PASS | 18 tests; 159 in the full suite; 90-sim-day replay completes; bulk load 2,521,085 rows with 21 quarantined by the `spend_inr` ceiling (P8); a 30-day replay lands 1,623 batches and misses 26; freshness green on every source against its own SLA schedule |
 | P6 | Engine: detection + attribution ladder | DONE | `make verify-p6` | PASS | 23 tests; **conformal p-values uniform on clean holdout (KS p = 0.716)**; only period 7 confirmed; outage detected 2026-03-06 at p = 0.0039; scenario week -14.03% against a -11.94% counterfactual truth; Adtributor puts `region=North` at rank 1 with bootstrap stability 0.96; Bennet residual 3.4e-08; price elasticity -1.63 against a planted -1.94 (15.9%); marketing elasticity not recovered — see Known issues |
-| P7 | Evidence, confidence, actions | PENDING | `make verify-p7` | — | |
+| P7 | Evidence, confidence, actions | DONE | `make verify-p7` | PASS | 17 tests in 50s; four separate abstention paths (stale feed, reconciliation breach, evidence floor, weak signal); post-dated decoy eliminated by the timing gate; six syndicated copies count as one independent source; Scenario C names `n = 18 against a 28-day floor`; expected impacts carry their interval; actions suppressed below Moderate |
 | P8 | LLM layer and verifiers | PENDING | `make verify-p8` | — | |
 | P9 | API | PENDING | `make verify-p9` | — | |
 | P10 | Frontend | PENDING | `make verify-p10` | — | |
@@ -315,7 +315,23 @@ Current phase: P7
 
 ## Phase plans
 
-### P7 plan (next)
+### P8 plan (next)
+
+1. `llm/provider.py` — `LLMProvider` ABC with a mandatory `MockProvider` that runs the
+   whole application offline, plus an Anthropic implementation behind the settings flag.
+2. `llm/planner.py`, `llm/hypotheses.py` — the model proposes *questions and
+   hypotheses*, never numbers; every hypothesis is a typed object the engine then tests.
+3. `llm/narrate.py` + `llm/templates.py` — narration constrained by the confidence tier's
+   permitted language.
+4. `llm/verify_numbers.py` — a deterministic verifier matching every numeral in the
+   generated text against the bundle's `NumberFact` set, within each fact's tolerance.
+   **A sentence containing an unsupported number never reaches a human.**
+5. `llm/verify_entailment.py` — claim-level checking (NLI behind a flag; a lexical
+   fallback by default).
+6. `llm/router.py` + `telemetry/` — model tier routing under the per-insight cost cap.
+7. `tests/unit/test_p8_llm.py` — the gate.
+
+### P7 plan (done)
 
 1. `engine/evidence.py` — BM25 retrieval over the corpus with dual-date awareness
    (match on **effective** date, not only publish date), `EvidenceConf = w1*rerank +

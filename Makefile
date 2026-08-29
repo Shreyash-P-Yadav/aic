@@ -137,7 +137,7 @@ verify-p6:
 	$(PYTEST) tests/statistical/test_p6_engine.py
 
 verify-p7:
-	$(PYTEST) tests/integration/test_p7_confidence.py
+	$(PYTEST) tests/integration/test_p7_evidence.py
 
 verify-p8:
 	$(PYTEST) tests/integration/test_p8_llm.py
