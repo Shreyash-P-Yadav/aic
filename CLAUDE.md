@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P5 — Landing zone, harness, ingestion.** P0–P4 are DONE.
+**P6 — Analytical engine: detection and the attribution ladder.** P0–P5 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -61,8 +61,10 @@ backend/src/insight_copilot/
   contracts/  models registry loader + kpi/*.yaml source/*.yaml
   security/   Identity Role SessionContext ContractSQLCompiler AuditLog
   datagen/    world/ latent/ decisions/ outcomes/ events/ projection/ defects/ corpus/ truth/
-  harness/    SimClock ArrivalScheduler LandingZone SourceWatcher DemoControls
-  ingest/     bronze silver gold dq freshness reconcile
+  harness/    clock cron periods scheduler slicer quirks manifest formats
+              landing (LandingZone + SourceWatcher) replay controls factory
+  ingest/     warehouse registry bronze dq dq_store expectations conform silver
+              gold panel freshness reconcile runner policies masking models
   engine/     baseline detect gate attribute_where attribute_kind attribute_why
               evidence confidence actions bundle
   llm/        provider planner hypotheses narrate verify_numbers verify_entailment
@@ -106,6 +108,7 @@ make install          venv + npm install            make lint        ruff + esli
 make typecheck        mypy --strict + tsc           make test        pytest + vitest
 make dev              backend :8000 + frontend :5173
 make generate         build the simulated world     make demo        full one-command demo
+make backfill         bulk historical load          make replay      DAYS=30 live arrivals
 make generate-truth   counterfactual ground truth (~6 min) -> data/ledger.parquet
 make validate-contracts
 make verify-pN        the gate for phase N          make verify-all  every gate in order

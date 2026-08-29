@@ -41,6 +41,10 @@ schema:
   drift_policy: quarantine_and_alert
 
 watermark: opened_at_ts
+# The ticketing API stamps UTC while every other feed stamps IST. Declared here so
+# silver converts rather than guesses; the ticket_id encodes the IST date it was
+# raised on, which is what verifies the declaration after conversion.
+timestamp_tz: UTC
 idempotency: [batch_id, row_hash]
 
 expectations:

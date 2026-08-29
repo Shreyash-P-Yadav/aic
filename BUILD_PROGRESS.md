@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T07:12:53Z
-Current phase: P5
+Updated: 2026-08-29T15:05:00Z
+Current phase: P6
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -9,7 +9,7 @@ Current phase: P5
 | P2 | Datagen: world, latent, decisions, outcomes | DONE | `make verify-p2` | PASS | Determinism gate green (zero-magnitude event is byte-identical); 25 tests; annual Rs 853 cr, CV 0.230, AR(1) 0.394, ACF lag-7 0.332, BP 7.8e-10, LB 0.976, fill 0.985; generation 6.4 s |
 | P3 | Events and ground truth | DONE | `make verify-p3` | PASS | 19 tests; Shapley sums to the observed gap **bit-exactly** (0.000000000 INR residual across 113 groups); Scenario A moves -11.94% against a -12% target; 440 calibration events spread over all four axes; full ledger in 149 runs / 5m47s |
 | P4 | Source projection, defects, corpus | DONE | `make verify-p4` | PASS | 52 tests; 11 source extracts validated against their contracts; **31/31 pathologies present and detectable**; 704 documents; all four reconciliation deltas in their designed ranges; no real-looking PII anywhere |
-| P5 | Landing zone, harness, ingestion | PENDING | `make verify-p5` | — | |
+| P5 | Landing zone, harness, ingestion | DONE | `make verify-p5` | PASS | 18 tests; 159 in the full suite; 90-sim-day replay completes; bulk load 2,521,085 rows with 21 quarantined by the `spend_inr` ceiling (P8); a 30-day replay lands 1,623 batches and misses 26; freshness green on every source against its own SLA schedule |
 | P6 | Engine: detection + attribution ladder | PENDING | `make verify-p6` | — | |
 | P7 | Evidence, confidence, actions | PENDING | `make verify-p7` | — | |
 | P8 | LLM layer and verifiers | PENDING | `make verify-p8` | — | |
@@ -198,9 +198,96 @@ Current phase: P5
   websocket implementation. Both are transitive-adjacent to already-pinned
   packages (pandas, uvicorn[standard]) rather than new capability.
 
+- **P5 — a price change moves the list price, not only the realised price.** The OMS
+  contract declares `unit_price_net <= list_price`; the simulator multiplied only the
+  realised price by an event's `price_multiplier`, so every price-increase event
+  produced rows the contract says cannot exist (41,509 of them, 3.1% of the order book,
+  all quarantined on the first ingestion run). Fixed in `simulate.py`. Demand, units and
+  revenue are unchanged — `list*(1-d)*m` and `(list*m)*(1-d)` are the same number — so
+  only `list_price` and the discount-depth submetric move. The panel checksum changed
+  and every P2/P3 gate was re-run green.
+
+- **P5 — a bulk historical load is one wide batch per source, not a replay at speed.**
+  Replaying thirty-six months of arrivals is roughly forty thousand batches. A real
+  deployment loads history in one pass and only then starts watching, so `backfill()`
+  lands one extract per source whose manifest lists every period it covers. Everything
+  downstream works on it unchanged, because a bulk load is just a very wide batch.
+
+- **P5 — `timestamp_tz` added to the source contract.** The ticketing API stamps UTC
+  while the house runs on IST, which moves every ticket raised before 05:30 onto the
+  previous day. Declared on the contract rather than inferred from the data: no
+  distributional test recovers a half-hour offset reliably. Silver converts on the
+  declaration and then *verifies* it against the business key — `TIC-20260316-N001`
+  encodes the IST date it was raised on — so the declaration is checked rather than
+  trusted. Post-conversion mismatch is under 0.5%.
+
+- **P5 — currency conversion is a published policy, not a heuristic.**
+  `ingest/policies/fx_rates.yaml` names the desk that books in USD, the rate and the
+  rate-date. Guessing "this row looks too cheap, divide by 83" is a heuristic; finance
+  publishing which unit books in what is how real pipelines resolve it. The plausibility
+  floor separates the desk's export lines from its INR lines; the rest of the desk is
+  untouched.
+
+- **P5 — `quarantine_and_alert` quarantines the undeclared column, not the batch.** A
+  literal reading would quarantine every MarTech row from the drift date onward and take
+  Scenario B with it. The alias column is alerted, kept in bronze exactly as delivered,
+  and dropped at silver, so nothing undeclared can reach a mart. `reject_batch` still
+  rejects the whole delivery.
+
+- **P5 — a positive `max_frac_violating` warns; a zero one quarantines.** A tolerated
+  condition is survivable by definition ("about one order in fifty has no region
+  mapping"), and holding those rows back would invent a revenue dip that never happened.
+  A zero tolerance means the condition is impossible, so the rows cannot be true and are
+  held. Either way the *rate* is the finding and it feeds the DQ score. Column `min`/`max`
+  ranges and declared `comparisons` are always hard: they are impossibilities, and they
+  are what catches the silent unit change.
+
+- **P5 — "inject event" runs a planted ledger event rather than synthesising one.** The
+  judge chooses when it breaks, not whether the break is real. A new event would need a
+  fresh simulation and a fresh counterfactual, and a number the ground-truth ledger
+  cannot vouch for has no business on stage.
+
+- **P5 — redundant range bounds alongside every exact key filter.** `list_contains($keys,
+  date)` alone cannot be pushed through an ASOF join, so every daily rebuild scanned the
+  whole thirty-six-month table and the ninety-day replay became quadratic. Period labels
+  sort lexicographically in calendar order (`2026-03-08`, `2026-W11`) precisely so a
+  `BETWEEN` bound can sit beside the membership test.
+
+
 ## Phase plans
 
-### P5 plan (next)
+### P6 plan (next)
+
+1. `engine/baseline.py` — period discovery by `scipy.signal.periodogram` confirmed by
+   ACF significance (never assume 7/365); MSTL on `log(y)` where strictly positive;
+   movable events as regressors rather than fixed-lag seasonality; counterfactual
+   prediction; `PooledLaunchBaseline` (empirical-Bayes pooling over comparable launches)
+   for sparse series.
+2. `engine/detect.py` — AR(p) whitening by AIC with Ljung-Box verification; EWMA
+   (lambda 0.94) variance floored by day-of-week-stratified MAD; conformal p-values with
+   calibration windows excluding known anomalies and regime breaks; Benjamini-Hochberg
+   across the KPI x segment scan; tabular CUSUM (k=0.5, h=4-5) with a persistence
+   requirement; robust Mahalanobis (`MinCovDet`) on the joint residual vector.
+3. `engine/gate.py` — materiality requiring both a statistical trigger and the contract's
+   business floor; priority = rule score x LightGBM ranker, ranker disabled below a
+   minimum label count and reverting to rules if stale.
+4. `engine/attribute_where.py` — Adtributor: `EP_s`, `Surprise_s = JS(p_s || q_s)`,
+   score = EP x Surprise; per-dimension scoring, prune to top-K, <=2-dimension
+   combinations among survivors, minimum-observation gating, Simpson's-paradox check on
+   nested segments, cumulative-EP Pareto rule; `bootstrap_stability(n=100)` with a
+   ranked shortlist below the stability floor rather than a named cause.
+5. `engine/attribute_kind.py` — Bennet price-volume-mix, asserting the parts sum to
+   `delta R` within 1e-6.
+6. `engine/attribute_why.py` — adstock grid, lags, Fourier terms, holiday/promo dummies;
+   SARIMAX with exogenous regressors as primary; OLS + Newey-West HAC as cross-check;
+   agreement score; Ljung-Box, Breusch-Pagan, Durbin-Watson, VIF, holdout MAPE;
+   regressor admissibility from the contract driver DAG with mediators excluded from a
+   total effect; VIF>5 drivers attributed as a group; event study against control regions.
+7. Coverage accounting: explained vs unexplained, the remainder labelled honestly.
+8. `tests/statistical/test_p6_engine.py` — the gate, whose credibility checkpoint is the
+   KS test for uniform conformal p-values on clean holdout windows.
+
+### P5 plan (done)
 
 1. `harness/clock.py` — `SimClock` with modes backfill / replay(N x) / live(1 x) / step.
 2. `harness/scheduler.py` — `ArrivalScheduler`: per source contract, cron + jitter +

@@ -186,9 +186,15 @@ class Simulator:
             cover = inventory.days_cover(np.maximum(trailing.mean(axis=2), 1e-6))
             extra_discount = cover_discount(cover)[home_row[cells.region_index], cells.sku_index]
             total_depth = np.clip(depth + extra_discount, 0.0, 0.75)
-            price = list_price * (1.0 - total_depth)
             if effects.price_multiplier is not None:
-                price = price * effects.price_multiplier[cells.sku_index, cells.region_index]
+                # A price change moves the *list* price and the realised price follows,
+                # because that is what a price change is. Multiplying only the realised
+                # price would let a rise push it above list, which is not a price rise —
+                # it is a negative discount, and no order book can represent one.
+                list_price = (
+                    list_price * effects.price_multiplier[cells.sku_index, cells.region_index]
+                )
+            price = list_price * (1.0 - total_depth)
 
             # --- latent demand ------------------------------------------------------
             demand = latent_demand(

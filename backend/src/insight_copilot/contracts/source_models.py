@@ -180,6 +180,16 @@ class SourceContract(StrictModel):
     restatement: Restatement = Field(default_factory=Restatement)
     schema_spec: SchemaSpec = Field(alias="schema")
     watermark: str
+    timestamp_tz: str = Field(
+        default="Asia/Kolkata",
+        description=(
+            "The timezone this source stamps its timestamps in. Declared rather than "
+            "inferred: a feed that writes UTC while the house runs on IST moves every "
+            "event raised before 05:30 onto the previous day, and no amount of "
+            "distributional guesswork recovers that reliably. Silver converts to IST "
+            "on this declaration and then *verifies* it against the business key."
+        ),
+    )
     idempotency: list[str] = Field(default_factory=lambda: ["batch_id", "row_hash"])
     expectations: Expectations = Field(default_factory=Expectations)
     reconciliation: list[ReconciliationCheck] = Field(default_factory=list)

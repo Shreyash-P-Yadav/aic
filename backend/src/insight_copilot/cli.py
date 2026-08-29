@@ -10,15 +10,23 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 from insight_copilot.config import get_settings
 from insight_copilot.contracts.registry import ContractRegistry
 from insight_copilot.errors import ContractError, SimulationError
 from insight_copilot.logging import get_logger
 
+if TYPE_CHECKING:
+    from insight_copilot.harness.factory import HarnessBundle
+
 logger = get_logger(__name__)
 
 Command = Callable[[argparse.Namespace], int]
+
+DEFAULT_REPLAY_DAYS = 30
+"""A month of live arrivals is enough for every declared cadence — daily, weekly,
+T+2, half-hourly and annual — to be exercised at least once."""
 
 
 def _not_yet(phase: str) -> Command:
@@ -133,12 +141,97 @@ def _cmd_generate(_: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_backfill(_: argparse.Namespace) -> int:
+    """Bulk historical load: land one extract per source and build every mart.
+
+    This is how a real deployment begins, and it is also the cold-start demo — the
+    moment the system comes up it has thirty-six months for most SKUs and eighteen
+    days for the newest launch, which is the whole point of Scenario C.
+    """
+    return _run_intake(days=0, replay=False)
+
+
+def _cmd_replay(args: argparse.Namespace) -> int:
+    """Backfill to N days before ``sim_today``, then replay those days live."""
+    return _run_intake(
+        days=max(int(getattr(args, "days", 0) or DEFAULT_REPLAY_DAYS), 1), replay=True
+    )
+
+
+def _run_intake(*, days: int, replay: bool) -> int:
+    """Shared body of ``backfill`` and ``replay``: build, load, report."""
+    import datetime as dt
+
+    from insight_copilot.errors import IngestionError
+    from insight_copilot.harness.factory import build_harness
+
+    cfg = get_settings()
+    cfg.ensure_dirs()
+    today = dt.date.fromisoformat(cfg.sim_today)
+    go_live = today - dt.timedelta(days=days) if replay else today
+
+    bundle: HarnessBundle | None = None
+    try:
+        bundle = build_harness()
+        horizon_start = bundle.world.simulator.config.horizon.start
+        summary = bundle.harness.backfill(horizon_start, go_live)
+        print(
+            f"OK    historical load {horizon_start}..{go_live}: "
+            f"{summary.landed} extracts, {summary.rows_landed:,} rows, "
+            f"{summary.rows_quarantined:,} quarantined"
+        )
+        if replay:
+            summary = bundle.harness.advance_days(days)
+            print(
+                f"OK    replayed {days} sim-days to {bundle.harness.clock.today}: "
+                f"{summary.landed} batches landed, {summary.missed} drops missed, "
+                f"{summary.rows_landed:,} rows, {summary.rows_quarantined:,} quarantined"
+            )
+        _print_marts(bundle)
+        _print_freshness(bundle)
+    except (IngestionError, SimulationError) as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+    finally:
+        if bundle is not None:
+            bundle.close()
+    return 0
+
+
+def _print_marts(bundle: HarnessBundle) -> None:
+    """Row counts for every gold object the KPI contracts read."""
+    print("OK    gold marts:")
+    for table in (
+        "fct_revenue_daily",
+        "fct_fulfilment_daily",
+        "fct_marketing_weekly",
+        "cube_revenue",
+        "driver_panel",
+        "dim_calendar",
+    ):
+        print(f"      gold.{table:22s} {bundle.warehouse.row_count('gold', table):>10,} rows")
+
+
+def _print_freshness(bundle: HarnessBundle) -> None:
+    """The landing-zone monitor, as text."""
+    print("OK    freshness:")
+    for status in bundle.harness.freshness():
+        age = f"{status.age_hours:6.1f}h" if status.age_hours is not None else "     -"
+        print(
+            f"      [{status.state:5s}] {status.source_id:22s} age {age} "
+            f"sla {status.sla_hours:5.0f}h  latest {status.latest_period or '-'}"
+        )
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
     "generate": _cmd_generate,
     "generate-truth": _cmd_generate_truth,
-    "backfill": _not_yet("P5"),
+    "backfill": _cmd_backfill,
+    "replay": _cmd_replay,
     "run": _not_yet("P6"),
     "backtest": _not_yet("P11"),
     "demo": _not_yet("P12"),
@@ -150,6 +243,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Dispatch a subcommand. Returns a process exit code."""
     parser = argparse.ArgumentParser(prog="insight-copilot", description=__doc__)
     parser.add_argument("command", choices=sorted(COMMANDS), help="subcommand to run")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=DEFAULT_REPLAY_DAYS,
+        help="replay window in simulated days (replay only)",
+    )
     args, _rest = parser.parse_known_args(argv)
     return COMMANDS[args.command](args)
 

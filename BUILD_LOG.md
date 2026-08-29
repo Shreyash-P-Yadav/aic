@@ -711,3 +711,162 @@ needed loosening:
   duplicate what regeneration reproduces exactly. The determinism is what the fixtures
   were for.
 
+
+---
+
+## P5 — Landing zone, harness, ingestion
+
+**Gate:** `make verify-p5` — 2026-08-29.
+
+```
+.venv/bin/pytest tests/integration/test_p5_ingest.py
+..................                                                       [100%]
+18 passed in 795.68s (0:13:15)
+```
+
+Full suite after the phase:
+
+```
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/user/aic
+configfile: pytest.ini
+testpaths: tests
+collected 159 items
+
+tests/integration/test_p4_projection.py ................................ [ 20%]
+....................                                                     [ 32%]
+tests/integration/test_p5_ingest.py ..................                   [ 44%]
+tests/statistical/test_p2_world.py .........................             [ 59%]
+tests/statistical/test_p3_truth.py ...................                   [ 71%]
+tests/unit/test_compiler.py ....................                         [ 84%]
+tests/unit/test_contracts.py ....................                        [ 96%]
+tests/unit/test_p0_bootstrap.py .....                                    [100%]
+
+======================= 159 passed in 1047.87s (0:17:27) =======================
+```
+
+`make lint` and `make typecheck` clean (`mypy --strict`: 125 source files, no issues;
+ruff: 138 files formatted, all checks passed; eslint, prettier and `tsc -b` green).
+
+### The eighteen gate assertions
+
+Replay and load
+1. `test_backfill_loads_history_into_every_contract_mart`
+2. `test_replaying_ninety_sim_days_completes`
+3. `test_every_source_delivered_during_the_replay`
+4. `test_the_calendar_spine_has_no_gaps`
+
+Freshness
+5. `test_a_healthy_weekly_feed_is_green_the_day_after_it_lands`
+12. `test_pausing_a_feed_walks_freshness_green_amber_red`
+
+Idempotency
+6. `test_the_same_batch_id_twice_changes_nothing`
+7. `test_identical_rows_under_a_new_batch_id_are_deduplicated`
+
+Restatement, watermarks and the event trigger
+8. `test_a_restatement_supersedes_and_both_versions_remain_queryable`
+9. `test_a_restatement_rewinds_the_watermark_for_its_period_only`
+10. `test_a_landing_wakes_only_the_kpis_that_depend_on_the_source`
+11. `test_a_late_batch_recomputes_exactly_the_affected_window`
+
+Quarantine, drift and conformance
+13. `test_the_silent_unit_change_is_quarantined_by_a_range_expectation`
+14. `test_quarantined_rows_are_visible_and_counted_never_dropped`
+15. `test_the_schema_drift_is_alerted_and_kept_out_of_silver`
+16. `test_the_timezone_declaration_is_verified_against_the_business_key`
+17. `test_the_foreign_desk_is_converted_at_the_policy_rate`
+18. `test_pii_is_masked_before_anything_is_written`
+
+### Measured — `make replay DAYS=30`
+
+```
+OK    historical load 2023-09-01..2026-02-27: 11 extracts, 2,521,085 rows, 21 quarantined
+OK    replayed 30 sim-days to 2026-03-29: 1623 batches landed, 26 drops missed, 80,954 rows, 0 quarantined
+OK    gold marts:
+      gold.fct_revenue_daily       1,479,826 rows
+      gold.fct_fulfilment_daily      483,152 rows
+      gold.fct_marketing_weekly        5,565 rows
+      gold.cube_revenue              302,717 rows
+      gold.driver_panel                4,151 rows
+      gold.dim_calendar                1,096 rows
+OK    freshness:
+      [green] competitor_prices      age   62.0h sla    96h  latest 2026-W12
+      [green] holiday_calendar       age  720.0h sla  8760h  latest static
+      [green] inventory_snapshots    age   19.6h sla    30h  latest 2026-03-27
+      [green] martech_weekly         age  137.6h sla     8h  latest 2026-W12
+      [green] news_articles          age   16.5h sla    48h  latest 2026-03-16
+      [green] oms_orders             age   21.8h sla     6h  latest 2026-03-27
+      [green] pim_products           age   19.9h sla    48h  latest 2026-03-28
+      [green] pricing_memos          age   36.4h sla   168h  latest 2026-03-27
+      [green] support_tickets        age    0.5h sla     4h  latest 2026-03-28
+      [green] weather_daily          age   22.8h sla    12h  latest 2026-03-27
+      [green] wms_fulfilment         age   17.9h sla    72h  latest 2026-03-26
+```
+
+Numbers worth keeping:
+
+- **1,623 batches landed over 30 sim-days**, 54 a day — 48 half-hourly ticket pulls
+  plus the six daily feeds — against **26 drops that never arrived** (1.6% of 1,649
+  planned, which is what the contracts' `failure_probability` fields add up to).
+- **21 rows quarantined by `range:spend_inr`** in the historical load. That is P8, the
+  silent paise-to-rupees change, caught by the contract's declared `max: 50000000` and
+  by nothing else. Every surviving `spend_inr` in silver is under the ceiling.
+- **Freshness is green everywhere at 30 sim-days**, including `martech_weekly` at
+  137.6 h old against an 8 h SLA. That is the point of measuring against the expected
+  arrival rather than raw age: the weekly drop that was due has arrived, so the feed is
+  healthy. Measuring age alone would paint every weekly source permanently red.
+- `oms_orders` is 21.8 h old against a 6 h SLA and green for the same reason.
+
+### What the gate caught, and what was fixed
+
+1. **A price rise pushed the realised price above list.** `simulate.py` applied an
+   event's `price_multiplier` to the *realised* price only, so during any price-increase
+   event `unit_price_net > list_price` — which the OMS contract declares impossible.
+   The first ingestion run quarantined **41,509 order lines** (3.1% of the book) on that
+   comparison. The contract was right and the simulator was wrong: a price change moves
+   the list price and the realised price follows. Fixed at the source; the violation
+   count is now **0** across all 1,721,854 rows. Revenue, units and demand are unchanged
+   by the fix (`list*(1-d)*m` and `(list*m)*(1-d)` are the same number), so only
+   `list_price` and `discount_depth` move.
+2. **Row hashing was quadratic-ish and wrong.** A per-row `agg(join)` over twelve
+   columns raised `TypeError` on nullable floats and would have taken minutes on the
+   1.7 M-row historical extract. Replaced with two keyed `pd.util.hash_pandas_object`
+   passes concatenated to 128 bits: **14.4 s for 1.72 M rows**, and it correctly finds
+   the 1,547 exactly-duplicated rows P6b plants on 2025-06-17.
+3. **The ninety-day replay was quadratic in the warehouse.** Every daily rebuild scanned
+   the whole thirty-six-month silver and bronze tables because the only filter was
+   `list_contains($keys, date)`, which DuckDB will not push through an ASOF join. Adding
+   a redundant `BETWEEN $lo AND $hi` range bound alongside the exact key list — period
+   labels sort lexicographically in calendar order precisely so this works — is what
+   makes the gate finish.
+4. **A bulk backfill is not a replay at speed.** Replaying 36 months of arrivals is
+   ~40,000 batches and hours of work. The historical load is now one wide extract per
+   source, listing every period it covers in a single manifest. Everything downstream —
+   provenance, period-scoped rebuilds, watermarks — works on it unchanged, because a
+   bulk load is just a very wide batch.
+5. **`received_at` one tick in the future made every operator-triggered drop invisible.**
+   The transport latency that separates `generated_at_sim` from `received_at` for a
+   scheduled drop must not apply to a file a person puts on disk now, or the demo's
+   restatement button does nothing until the next tick. `manual_arrival()` cuts the file
+   a moment *before* the instant it appears.
+
+### Deviations recorded
+
+- **"Inject event" runs a planted ledger event; it does not synthesise a new one.**
+  The judge chooses *when it breaks*, not whether the break is real. Synthesising a new
+  event would need a fresh simulation and a fresh counterfactual, and a number the
+  ground-truth ledger cannot vouch for has no business in this demo. Documented in
+  `harness/controls.py`.
+- **`quarantine_and_alert` quarantines the undeclared column, not the batch.** A
+  literal reading would quarantine every MarTech row from 2025-11-03 onward and take
+  Scenario B with it. The alias column is alerted, kept in bronze exactly as delivered,
+  and dropped at silver so nothing undeclared can reach a mart. `reject_batch` still
+  rejects the whole delivery (and quarantines its rows, so the anti-join keeps them out).
+- **`max_frac_violating` with a positive tolerance warns; with a zero tolerance it
+  quarantines.** A tolerated condition is survivable by definition — "about one order in
+  fifty arrives with no region mapping" — and holding those rows back would invent a
+  revenue dip that never happened. A zero tolerance means the condition is impossible, so
+  the rows cannot be true and are held. The rate is the finding either way, and it feeds
+  the DQ score.

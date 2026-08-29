@@ -1,0 +1,29 @@
+# Foreign-currency booking policy for the silver layer.
+#
+# One of Meridian's export desks books in USD and its rows reach the OMS extract
+# undenominated — there is no currency column, only a region and a channel. Real
+# pipelines resolve this exactly this way: finance publishes which unit books in what,
+# treasury publishes a rate-date, and the conform step applies both. Guessing from the
+# magnitude alone would be a heuristic; this is a policy.
+#
+# The rate is the desk's own booking rate, published by treasury for the period. Using
+# the desk's rate rather than a spot rate is deliberate: it is what the source system
+# used, so conversion is exact rather than approximately right.
+policy_rate_date: "2026-01-01"
+
+rates:
+  USD: 83.4
+
+foreign_units:
+  - source_id: oms_orders
+    unit_name: "East marketplace export desk"
+    currency: USD
+    where:
+      region: East
+      channel: marketplace
+    measures: [unit_price_net, list_price, returns_value]
+    # A converted row is one whose price is implausibly low for an INR-denominated
+    # order line. The whole desk does not book in USD - only the export part of it -
+    # so the floor is what separates the two, and it sits two orders of magnitude
+    # below the cheapest SKU in the catalog.
+    plausibility_floor_inr: 20.0

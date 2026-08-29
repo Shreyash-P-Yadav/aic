@@ -17,7 +17,7 @@ BACKEND := backend
         lint lint-backend lint-frontend format \
         typecheck typecheck-backend typecheck-frontend \
         test test-backend test-frontend \
-        dev dev-backend dev-frontend build generate demo demo-reset \
+        dev dev-backend dev-frontend build generate backfill replay demo demo-reset \
         validate-contracts generate-truth \
         verify-p0 verify-p1 verify-p2 verify-p3 verify-p4 verify-p5 verify-p6 \
         verify-p7 verify-p8 verify-p9 verify-p10 verify-p11 verify-p12 verify-all
@@ -94,6 +94,12 @@ generate:  ## Generate the simulated world, events, sources and corpus
 
 generate-truth:  ## Compute every planted event's true contribution -> data/ledger.parquet
 	$(PY) -m insight_copilot.cli generate-truth
+
+backfill:  ## Bulk historical load: land one extract per source, build every mart
+	$(PY) -m insight_copilot.cli backfill
+
+replay:  ## Backfill to DAYS before sim_today, then replay those days live (DAYS=30)
+	$(PY) -m insight_copilot.cli replay --days $(or $(DAYS),30)
 
 demo:  ## One command: generate, backfill, ingest, run, serve
 	$(PY) -m insight_copilot.cli demo
