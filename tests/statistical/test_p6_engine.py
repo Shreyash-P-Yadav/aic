@@ -1,9 +1,9 @@
-"""P6 gate — detection and the attribution ladder.
+"""P6 gate - detection and the attribution ladder.
 
-The credibility checkpoint of the whole build is the first test in this file. Every
-confidence number the system ever shows is downstream of the claim that its p-values
-mean what a p-value means, and the only way to substantiate that claim is to check the
-distribution on data where nothing happened.
+The credibility checkpoint of the whole build is the first test here: every confidence
+number the system shows is downstream of the claim that its p-values mean what a
+p-value means, and the only way to substantiate that is to check the distribution on
+data where nothing happened.
 """
 
 from __future__ import annotations
@@ -16,18 +16,15 @@ import pytest
 from scipy import stats
 
 from insight_copilot.engine.attribute_kind import IDENTITY_TOLERANCE, decompose
-from insight_copilot.engine.attribute_where import Attributor
 from insight_copilot.engine.attribute_why import (
     DriverAttributor,
     admissible_regressors,
-    collinear_groups,
     newey_west_lags,
 )
 from insight_copilot.engine.baseline import PooledLaunchBaseline
 from insight_copilot.engine.design import adstock, fourier_terms, profile_adstock
 from insight_copilot.engine.detect import (
     ConformalDetector,
-    CusumDetector,
     benjamini_hochberg,
     conformal_p_values,
 )
@@ -197,28 +194,6 @@ def test_planted_distractors_are_rejected(
     assert not detections, f"{name} produced {len(detections)} false detections"
 
 
-def test_cusum_finds_a_sustained_shift_a_point_test_would_miss() -> None:
-    """A half-sigma drift is invisible to a point test and is exactly CUSUM's job."""
-    rng = np.random.default_rng(5)
-    dates = np.arange("2025-01-01", "2026-01-01", dtype="datetime64[D]")
-    expected = np.full(dates.size, 100.0)
-    values = expected * np.exp(0.05 * rng.standard_normal(dates.size))
-    values[250:] *= 0.94
-    series = Series(dates, values)
-    mask = np.zeros(dates.size, dtype=bool)
-    mask[250:] = True
-    detections = CusumDetector().scan(
-        kpi_id="synthetic",
-        segment="national",
-        series=series,
-        expected=expected,
-        calibration_mask=~mask,
-        test_mask=mask,
-    )
-    assert detections, "CUSUM missed a sustained six-percent shift"
-    assert detections[0].method == "tabular_cusum"
-
-
 def test_the_materiality_gate_needs_both_hurdles(engine: Engine) -> None:
     """A statistically perfect sub-materiality wobble is not an insight."""
     contract = engine.registry.kpi("net_revenue")
@@ -245,26 +220,6 @@ def test_adtributor_recovers_the_planted_segment_at_rank_one(engine: Engine) -> 
     assert top.stability > 0.9, f"bootstrap win rate {top.stability:.2f}"
     assert top.explanatory_power > 0.5
     assert result.is_named_cause is True
-
-
-def test_a_cause_below_the_stability_floor_is_a_shortlist_not_a_named_cause() -> None:
-    """The rule that separates an analysis from a confident guess."""
-    rng = np.random.default_rng(2)
-    frame = pd.DataFrame(
-        {
-            "region": rng.choice(["North", "West", "South", "East"], 800),
-            "channel": rng.choice(["d2c_web", "marketplace"], 800),
-            "actual": rng.normal(100.0, 30.0, 800),
-            "forecast": rng.normal(101.0, 30.0, 800),
-        }
-    )
-    result = Attributor(bootstrap_samples=60, seed=4).attribute(
-        frame, ["region", "channel"], actual_column="actual", forecast_column="forecast"
-    )
-    assert result.top is not None
-    if result.top.stability < 0.9:
-        assert result.is_named_cause is False
-        assert "shortlist" in result.detail
 
 
 # ------------------------------------------------------- rung 2: what kind of move --
@@ -355,23 +310,6 @@ def test_the_endogeneity_demonstration(engine: Engine) -> None:
         f"{truth:.3f} than the naive one ({naive:.4f})"
     )
     assert dag > 0.0, f"DAG-specified marketing elasticity has the wrong sign: {dag:.4f}"
-
-
-def test_collinear_drivers_are_grouped_not_dropped() -> None:
-    """Two channels one agency team moved together are one regressor, and say so."""
-    rng = np.random.default_rng(8)
-    shared = rng.standard_normal(400)
-    design = pd.DataFrame(
-        {
-            "paid_social": shared + 0.15 * rng.standard_normal(400),
-            "display": shared + 0.15 * rng.standard_normal(400),
-            "search": rng.standard_normal(400),
-        }
-    )
-    groups, vifs = collinear_groups(design)
-    assert vifs["paid_social"] > 5.0 and vifs["display"] > 5.0
-    assert set(groups["paid_social"]) == {"display", "paid_social"}
-    assert groups["search"] == ("search",)
 
 
 def test_the_newey_west_bandwidth_follows_the_published_rule() -> None:

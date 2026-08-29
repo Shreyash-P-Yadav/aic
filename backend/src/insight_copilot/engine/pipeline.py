@@ -19,15 +19,19 @@ from insight_copilot.engine.attribute_where import WhereResult
 from insight_copilot.engine.attribute_why import WhyResult
 from insight_copilot.engine.bundle import (
     AbstentionArtifact,
-    ActionFact,
     ConfidenceFact,
-    DriverFact,
-    EvidenceFact,
-    FreshnessFact,
     InsightEvidenceBundle,
-    LineageStep,
-    NumberFact,
-    SegmentFact,
+)
+from insight_copilot.engine.bundle_mappers import (
+    action_fact,
+    confidence_fact,
+    drivers_for,
+    eta_for,
+    evidence_for,
+    freshness_for,
+    lineage_for,
+    numbers_for,
+    segments_for,
 )
 from insight_copilot.engine.calibration import ConfidenceScorer
 from insight_copilot.engine.confidence import ConfidenceInputs, ConfidenceResult
@@ -90,7 +94,7 @@ class InsightEngine:
     ) -> InsightEvidenceBundle | AbstentionArtifact:
         """Score confidence, then build whichever output the tier permits."""
         confidence = self._scorer.score(self._inputs_for(inputs), inputs.contract)
-        fact = _confidence_fact(confidence)
+        fact = confidence_fact(confidence)
         if confidence.abstained:
             return self._abstain(inputs, confidence, fact, now=now)
         return self._insight(inputs, confidence, fact, now=now)
@@ -153,23 +157,23 @@ class InsightEngine:
             delta_pct=detection.delta_pct,
             detection_method=detection.method,
             p_value=detection.p_value,
-            numbers=_numbers(inputs),
-            segments=_segments(inputs.where),
+            numbers=numbers_for(inputs),
+            segments=segments_for(inputs.where),
             price_effect=inputs.price_effect,
             volume_effect=inputs.volume_effect,
             mix_effect=inputs.mix_effect,
-            drivers=_drivers(inputs.why),
+            drivers=drivers_for(inputs.why),
             explained_fraction=inputs.why.explained_fraction if inputs.why else 0.0,
             unexplained_fraction=inputs.why.unexplained_fraction if inputs.why else 1.0,
-            evidence=_evidence(inputs.evidence),
+            evidence=evidence_for(inputs.evidence),
             evidence_corroboration=inputs.evidence.corroboration if inputs.evidence else 0.0,
             evidence_rejected_by_timing=(
                 inputs.evidence.rejected_by_timing if inputs.evidence else []
             ),
             confidence=fact,
-            actions=[_action_fact(item) for item in actions],
-            freshness=_freshness(inputs.freshness),
-            lineage=_lineage(inputs.contract),
+            actions=[action_fact(item) for item in actions],
+            freshness=freshness_for(inputs.freshness),
+            lineage=lineage_for(inputs.contract),
         )
         logger.info(
             "engine.insight",
@@ -252,9 +256,9 @@ class InsightEngine:
                 if not inputs.reconciliation_ok
                 else RETRY_ON_EVIDENCE
             ),
-            eta=_eta(inputs.freshness, stale, now),
+            eta=eta_for(inputs.freshness, stale, now),
             confidence=fact,
-            freshness=_freshness(inputs.freshness),
+            freshness=freshness_for(inputs.freshness),
         )
         logger.info(
             "engine.abstained",
@@ -263,231 +267,3 @@ class InsightEngine:
             retry=artifact.retry_trigger,
         )
         return artifact
-
-
-# ------------------------------------------------------------------ mappers --
-def _confidence_fact(result: ConfidenceResult) -> ConfidenceFact:
-    return ConfidenceFact(
-        signals={item.name: item.value for item in result.signals},
-        signal_detail={item.name: item.detail for item in result.signals},
-        composite=result.composite,
-        calibrated=result.calibrated,
-        calibration_fitted=result.calibration_fitted,
-        tier=result.tier,
-        weakest_signal=result.weakest.name,
-        hard_gate_failures=result.hard_gate_failures,
-    )
-
-
-def _numbers(inputs: RunInputs) -> list[NumberFact]:
-    """Every number a sentence about this insight may contain."""
-    detection = inputs.detection
-    unit = inputs.contract.definition.unit
-    facts = [
-        NumberFact(key="observed", value=detection.observed, unit=unit, method="gold mart"),
-        NumberFact(
-            key="counterfactual",
-            value=detection.expected,
-            unit=unit,
-            method="regression baseline, event window held out",
-        ),
-        NumberFact(
-            key="delta", value=detection.delta, unit=unit, method="observed - counterfactual"
-        ),
-        NumberFact(
-            key="delta_pct", value=detection.delta_pct, unit="pct", method="delta / counterfactual"
-        ),
-        NumberFact(
-            key="p_value", value=detection.p_value, unit="probability", method=detection.method
-        ),
-    ]
-    for name, value in (
-        ("price_effect", inputs.price_effect),
-        ("volume_effect", inputs.volume_effect),
-        ("mix_effect", inputs.mix_effect),
-    ):
-        if value is not None:
-            facts.append(NumberFact(key=name, value=value, unit=unit, method="Bennet indicator"))
-    facts.append(
-        NumberFact(
-            key="confidence_level",
-            value=95.0,
-            unit="pct",
-            method="the interval convention every estimate here is reported at",
-        )
-    )
-    if inputs.where and inputs.where.top is not None:
-        facts.append(
-            NumberFact(
-                key="top_segment_ep",
-                value=inputs.where.top.explanatory_power,
-                unit="fraction",
-                method="Adtributor explanatory power",
-            )
-        )
-        facts.append(
-            NumberFact(
-                key="top_segment_stability",
-                value=inputs.where.top.stability,
-                unit="fraction",
-                method="bootstrap win rate over 100 resamples",
-            )
-        )
-    if inputs.why is not None:
-        facts.append(
-            NumberFact(
-                key="explained_fraction",
-                value=inputs.why.explained_fraction,
-                unit="fraction",
-                method="share of variation the model accounts for",
-            )
-        )
-        facts.append(
-            NumberFact(
-                key="unexplained_fraction",
-                value=inputs.why.unexplained_fraction,
-                unit="fraction",
-                method="the remainder, labelled honestly",
-            )
-        )
-        for estimate in inputs.why.estimates:
-            facts.extend(
-                [
-                    NumberFact(
-                        key=f"{estimate.driver_id}_coefficient",
-                        value=estimate.coefficient,
-                        unit="elasticity",
-                        method="driver regression",
-                    ),
-                    NumberFact(
-                        key=f"{estimate.driver_id}_low",
-                        value=estimate.confidence_interval[0],
-                        unit="elasticity",
-                        method="95% interval",
-                    ),
-                    NumberFact(
-                        key=f"{estimate.driver_id}_high",
-                        value=estimate.confidence_interval[1],
-                        unit="elasticity",
-                        method="95% interval",
-                    ),
-                    NumberFact(
-                        key=f"{estimate.driver_id}_agreement",
-                        value=estimate.agreement,
-                        unit="fraction",
-                        method="agreement between the two estimators",
-                    ),
-                ]
-            )
-    return facts
-
-
-def _segments(where: WhereResult | None) -> list[SegmentFact]:
-    if where is None:
-        return []
-    return [
-        SegmentFact(
-            label=item.label,
-            actual=item.actual,
-            forecast=item.forecast,
-            explanatory_power=item.explanatory_power,
-            surprise=item.surprise,
-            stability=item.stability,
-            simpson_flag=item.simpson_flag,
-        )
-        for item in where.candidates[:8]
-    ]
-
-
-def _drivers(why: WhyResult | None) -> list[DriverFact]:
-    if why is None:
-        return []
-    return [
-        DriverFact(
-            driver_id=item.driver_id,
-            coefficient=item.coefficient,
-            interval_low=item.confidence_interval[0],
-            interval_high=item.confidence_interval[1],
-            p_value=item.p_value,
-            agreement=item.agreement,
-            group=list(item.group),
-        )
-        for item in why.estimates
-    ]
-
-
-def _evidence(bundle: EvidenceBundle | None) -> list[EvidenceFact]:
-    if bundle is None:
-        return []
-    return [
-        EvidenceFact(
-            doc_id=item.document.doc_id,
-            kind=item.document.kind,
-            title=item.document.title,
-            publish_date=item.document.publish_date,
-            effective_date=item.document.effective_date,
-            source_tier=item.document.source_tier,
-            confidence=item.confidence,
-            independence_key=item.independence_key,
-            matched_on=item.matched_on,
-        )
-        for item in bundle.items
-    ]
-
-
-def _action_fact(action: RecommendedAction) -> ActionFact:
-    return ActionFact(
-        action_id=action.spec.id,
-        driver_id=action.driver_id,
-        lever=action.spec.lever,
-        title=action.spec.title,
-        expected_impact_central=action.expected_impact.central,
-        expected_impact_low=action.expected_impact.low,
-        expected_impact_high=action.expected_impact.high,
-        owner_role=action.owner_role,
-        needs_approval=action.needs_approval,
-        monitoring_kpi=action.spec.monitoring.kpi,
-        monitoring_checkpoints=list(action.spec.monitoring.checkpoint_days),
-        success_threshold_pct=action.spec.monitoring.success_threshold_pct,
-        earliest_effect=action.earliest_effect,
-    )
-
-
-def _freshness(statuses: list[FreshnessStatus]) -> list[FreshnessFact]:
-    return [
-        FreshnessFact(
-            source_id=item.source_id,
-            state=item.state,
-            age_hours=item.age_hours,
-            sla_hours=item.sla_hours,
-            latest_period=item.latest_period,
-        )
-        for item in statuses
-    ]
-
-
-def _lineage(contract: KPIContract) -> list[LineageStep]:
-    """The contract's own declared lineage, carried onto the card."""
-    return [
-        LineageStep(
-            stage=step.step,
-            frm=step.source if isinstance(step.source, str) else ", ".join(step.source),
-            to=step.target,
-            transform=step.transform,
-        )
-        for step in contract.lineage
-    ]
-
-
-def _eta(
-    statuses: list[FreshnessStatus], stale: tuple[str, ...], now: dt.datetime
-) -> dt.datetime | None:
-    """When the blocking source is next due. The abstention card's "come back at"."""
-    if not stale:
-        return None
-    due = [
-        status.next_due_at
-        for status in statuses
-        if status.source_id in stale and status.next_due_at is not None
-    ]
-    return min(due) if due else now + dt.timedelta(hours=24)

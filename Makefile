@@ -134,7 +134,7 @@ verify-p5:
 	$(PYTEST) tests/integration/test_p5_ingest.py
 
 verify-p6:
-	$(PYTEST) tests/statistical/test_p6_engine.py
+	$(PYTEST) tests/statistical/test_p6_engine.py tests/statistical/test_p6_synthetic.py
 
 verify-p7:
 	$(PYTEST) tests/integration/test_p7_evidence.py
