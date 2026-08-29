@@ -149,10 +149,10 @@ verify-p10:
 	cd $(FRONTEND) && npm run build && npm run test && npm run e2e
 
 verify-p11:
-	$(PYTEST) tests/e2e/test_p11_evals.py
+	cd frontend && npm run build && npm run test && npm run e2e/test_p11_evals.py
 
 verify-p12:
-	$(PYTEST) tests/e2e/test_p12_hardening.py
+	cd frontend && npm run build && npm run test && npm run e2e/test_p12_hardening.py
 
 verify-all: verify-p0 verify-p1 verify-p2 verify-p3 verify-p4 verify-p5 verify-p6 \
             verify-p7 verify-p8 verify-p9 verify-p10 verify-p11 verify-p12  ## Every gate, in order

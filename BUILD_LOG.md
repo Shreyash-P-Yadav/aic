@@ -1153,3 +1153,72 @@ RSM's `user_region = North` binding is what the compiler substitutes into the co
 row-filter template, so switching role through the API changes what the next query
 returns. A security property that only holds when called directly is not a security
 property.
+
+## P10 — Frontend
+
+`make verify-p10` — build, unit tests, Playwright E2E against the live backend
+(`insight_copilot.cli demo --days 30` serving on :8000, `vite preview` on :4173).
+
+```
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 106 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.42 kB │ gzip:  0.28 kB
+dist/assets/index-KqFnK8p4.css   14.34 kB │ gzip:  3.82 kB
+dist/assets/index-D6s65CHK.js   250.65 kB │ gzip: 77.61 kB
+✓ built in 1.71s
+
+> insight-copilot-frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /home/user/aic/frontend
+
+ ✓ src/components/components.test.tsx (7 tests) 122ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  18:52:25
+   Duration  1.05s (transform 99ms, setup 55ms, collect 157ms, tests 122ms, environment 341ms, prepare 109ms)
+
+
+> insight-copilot-frontend@0.1.0 e2e
+> playwright test
+
+
+Running 6 tests using 1 worker
+
+  ✓  1 [desktop] › e2e/scenarios.spec.ts:37:1 › every screen renders with no horizontal page scroll at 768px (696ms)
+  ✓  2 [desktop] › e2e/scenarios.spec.ts:49:1 › the shell always states that the data is simulated (173ms)
+  ✓  3 [desktop] › e2e/scenarios.spec.ts:55:1 › switching role calls the API and the selection persists (430ms)
+  ✓  4 [desktop] › e2e/scenarios.spec.ts:65:1 › every async panel shows a skeleton or an explicit state, never a blank (4.9s)
+  ✓  5 [desktop] › e2e/scenarios.spec.ts:76:1 › the ask screen asks for clarification rather than guessing (754ms)
+  ✓  6 [desktop] › e2e/scenarios.spec.ts:87:1 › capture screenshots at both widths in both themes (21.3s)
+
+  6 passed (30.2s)
+```
+
+### Screenshot review (the part of the gate that is not automatable)
+
+32 screenshots in `artifacts/screenshots/` — 8 screens × {768, 1440} × {light, dark}.
+Read every one. Findings:
+
+* **Sources strip, last row stretched.** The freshness tiles were a wrapping flex row
+  with `flex-1 min-w-[9rem]`, so the three tiles that wrapped onto row two each grew to
+  a third of the container while row one's eight sat at 9rem. Fixed by making it a
+  grid: `[grid-template-columns:repeat(auto-fill,minmax(9rem,1fr))]`. Every tile is now
+  on the same module at both widths. Re-captured and re-checked.
+* No label collision, no clipped text, no overflow, no contrast failure found on any of
+  the other 31. The data-quality table is long but scrolls in its own container; the
+  audit table's columns align at 768px; the dark palette holds contrast on the muted
+  `--ink-muted` caption rows.
+
+Asserted by the E2E suite rather than by eye: no horizontal page scroll at 768px on any
+route; every async panel renders a `Skeleton` while pending and an `EmptyState` (or a
+typed error state) when empty; no chart uses two y-axes — `DriverChart` puts contributions
+on one axis and the counterfactual band on the same one, because a second axis lets a
+reader read any relationship they like into two unrelated scales.

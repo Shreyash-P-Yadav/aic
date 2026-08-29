@@ -225,6 +225,64 @@ def _print_freshness(bundle: HarnessBundle) -> None:
         )
 
 
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """One command: generate, backfill, replay, scan, and serve.
+
+    The same path the E2E suite drives. A demo that took a different route through the
+    code than the tests do is a demo that can break without any test noticing.
+    """
+    import datetime as dt
+
+    import uvicorn
+
+    from insight_copilot.api.app import create_app
+    from insight_copilot.api.state import AppState
+    from insight_copilot.demo import run_demo
+    from insight_copilot.errors import IngestionError
+    from insight_copilot.harness.factory import build_harness
+
+    cfg = get_settings()
+    cfg.ensure_dirs()
+    days = max(int(getattr(args, "days", 0) or DEFAULT_REPLAY_DAYS), 1)
+    today = dt.date.fromisoformat(cfg.sim_today)
+    try:
+        bundle = build_harness()
+        horizon_start = bundle.world.simulator.config.horizon.start
+        bundle.harness.backfill(horizon_start, today - dt.timedelta(days=days))
+        summary = bundle.harness.advance_days(days)
+        print(
+            f"OK    world loaded and {days} sim-days replayed: {summary.landed} batches, "
+            f"{summary.rows_landed:,} rows"
+        )
+        state = AppState(cfg)
+        state.attach_warehouse(bundle.warehouse, bundle.harness, bundle.controls)
+        result = run_demo(state, bundle.world, bundle.warehouse)
+        print(f"OK    scenario run: {result.detail or 'no detection survived'}")
+        _print_marts(bundle)
+    except (IngestionError, SimulationError) as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+
+    app = create_app(cfg, state)
+    print(f"OK    serving on http://{cfg.api_host}:{cfg.api_port} — all data is simulated")
+    uvicorn.run(app, host=cfg.api_host, port=cfg.api_port, log_config=None)
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    """Serve the API with a loaded warehouse but no scripted scenario run."""
+    del args
+    import uvicorn
+
+    from insight_copilot.api.app import create_app
+
+    cfg = get_settings()
+    uvicorn.run(create_app(cfg), host=cfg.api_host, port=cfg.api_port, log_config=None)
+    return 0
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
@@ -234,7 +292,8 @@ COMMANDS: dict[str, Command] = {
     "replay": _cmd_replay,
     "run": _not_yet("P6"),
     "backtest": _not_yet("P11"),
-    "demo": _not_yet("P12"),
+    "demo": _cmd_demo,
+    "serve": _cmd_serve,
     "demo-reset": _not_yet("P12"),
 }
 

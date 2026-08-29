@@ -1,16 +1,41 @@
 /**
- * P0 shell. Screens arrive in P10; this exists so the styled page and the theme
- * tokens are verifiable from the first phase rather than at the end.
+ * Routing and the query client.
+ *
+ * Nine screens over a typed API. Retries are off by default because most failures
+ * here are *states* rather than transients — a cold start with no warehouse is a real
+ * answer, and retrying it three times only delays showing the reader what is wrong.
  */
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Navigate, Route, Routes } from 'react-router-dom';
+
+import { Layout } from '@/components/Layout';
+import { InsightDetail } from '@/screens/InsightDetail';
+import { InsightFeed } from '@/screens/InsightFeed';
+import { Actions, Admin, Ask } from '@/screens/Interactive';
+import { Audit, DataSources, Telemetry, TrustCalibration } from '@/screens/Simple';
+
+const client = new QueryClient({
+  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 15_000 } },
+});
+
 export default function App() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-3 px-6">
-      <p className="text-xs uppercase tracking-widest text-ink-muted">Insight Copilot</p>
-      <h1 className="text-3xl font-semibold text-ink">KPI intelligence-to-action engine</h1>
-      <p className="text-ink-secondary">
-        Statistics decide; the model narrates. Scaffold ready — screens land in phase P10.
-      </p>
-      <p className="text-xs text-ink-muted">All data in this application is simulated.</p>
-    </main>
+    <QueryClientProvider client={client}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<InsightFeed />} />
+          <Route path="insights/:insightId" element={<InsightDetail />} />
+          <Route path="ask" element={<Ask />} />
+          <Route path="actions" element={<Actions />} />
+          <Route path="data" element={<DataSources />} />
+          <Route path="trust" element={<TrustCalibration />} />
+          <Route path="telemetry" element={<Telemetry />} />
+          <Route path="admin" element={<Admin />} />
+          <Route path="audit" element={<Audit />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </QueryClientProvider>
   );
 }
