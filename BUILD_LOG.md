@@ -1049,3 +1049,67 @@ confidence.scored  composite 0.9187  calibrated 0.9187  tier High  gates []
 The composite equals the calibrated score because the isotonic map is **unfitted**, and
 the bundle carries `calibration_fitted = false` so nothing downstream can present a raw
 score as a probability. P11 fits it on a real backtest.
+
+---
+
+## P8 — LLM layer and verifiers
+
+**Gate:** `make verify-p8` — 2026-08-29.
+
+```
+.venv/bin/pytest tests/unit/test_p8_llm.py
+...............................                                          [100%]
+31 passed in 0.34s
+```
+
+`make lint` and `mypy --strict` clean (151 source files). The gate runs in a third of a
+second **with no API key and no network**, which is the point: `LLM_PROVIDER=mock` is
+not a testing convenience, it is what protects development cost, test determinism and
+demo day.
+
+### The gate's own requirements, each with its test
+
+| Requirement | Test |
+|---|---|
+| Full pipeline, four personas, mock provider | `test_mock_runs_the_whole_pipeline_offline_with_no_api_key` |
+| An injected wrong number is caught and regenerated | `test_an_injected_wrong_number_is_caught_and_regenerated` |
+| An uncited hypothesis is dropped | `test_an_uncited_hypothesis_is_dropped_not_downweighted` |
+| A plan outside the allowlist is rejected | `test_a_plan_naming_an_undeclared_dimension_is_rejected` |
+| No API key degrades to templates rather than crashing | `test_anthropic_without_a_key_degrades_to_templates_rather_than_crashing` |
+| Same bundle + persona hits the cache | `test_the_same_bundle_and_persona_hit_the_cache_on_the_second_call` |
+
+### What the gate caught
+
+1. **A fabricated 63.10% verified successfully against a real 62%.** `NumberFact.matches`
+   scaled its tolerance by `max(|value|, 1.0)`, which gives a fact of 0.62 an absolute
+   band of +/-0.05 — eight percent, wide enough for an invented number to pass as a
+   rounding. This is the single most dangerous bug class in the phase: the verifier
+   *reported success*. The tolerance is now relative to the fact's own value.
+2. **The template narrator failed its own verifier.** It writes an explanatory power of
+   0.507 as "51%", and the bundle stores it as a fraction. Both are right; the verifier
+   could not bridge them. Percent-against-fraction is now an explicit unit
+   normalisation, which is what the module claimed to do all along.
+3. **Every narration went down the fallback path.** The mock returned prose unrelated to
+   the bundle, so verification always failed and the model-accepted path was never
+   exercised by any test. The mock now rewrites the draft it is handed, which is what a
+   well-behaved model does.
+4. **`15 March` failed verification.** A bare day-of-month next to a month name is a
+   date, not a measurement; without the guard every well-written narrative fails on the
+   word "15".
+5. **`2026` was extracted as `202`.** The grouped-thousands alternative matched three
+   digits out of a four-digit year and left a stray `6`. It now requires an actual
+   separator.
+
+### Measured
+
+```
+router.completed  call_site=narrate  tier=mid  downgraded=False  spend_usd=0.00329
+narrate.verification_failed  attempt=1  detail="1 unsupported number(s): '99,999,999' (1e+08)"
+narrate.verification_failed  attempt=2  ...
+narrate.verification_failed  attempt=3  ...
+verify.numbers  found=8  unsupported=0        <- the template fallback, verified clean
+```
+
+Three model attempts, three rejections, then the template — which cannot produce an
+unsupported number because it only interpolates facts. **A sentence containing an
+unsupported number never reaches a human.**

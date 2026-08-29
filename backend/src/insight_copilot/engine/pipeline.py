@@ -308,6 +308,14 @@ def _numbers(inputs: RunInputs) -> list[NumberFact]:
     ):
         if value is not None:
             facts.append(NumberFact(key=name, value=value, unit=unit, method="Bennet indicator"))
+    facts.append(
+        NumberFact(
+            key="confidence_level",
+            value=95.0,
+            unit="pct",
+            method="the interval convention every estimate here is reported at",
+        )
+    )
     if inputs.where and inputs.where.top is not None:
         facts.append(
             NumberFact(
@@ -317,6 +325,60 @@ def _numbers(inputs: RunInputs) -> list[NumberFact]:
                 method="Adtributor explanatory power",
             )
         )
+        facts.append(
+            NumberFact(
+                key="top_segment_stability",
+                value=inputs.where.top.stability,
+                unit="fraction",
+                method="bootstrap win rate over 100 resamples",
+            )
+        )
+    if inputs.why is not None:
+        facts.append(
+            NumberFact(
+                key="explained_fraction",
+                value=inputs.why.explained_fraction,
+                unit="fraction",
+                method="share of variation the model accounts for",
+            )
+        )
+        facts.append(
+            NumberFact(
+                key="unexplained_fraction",
+                value=inputs.why.unexplained_fraction,
+                unit="fraction",
+                method="the remainder, labelled honestly",
+            )
+        )
+        for estimate in inputs.why.estimates:
+            facts.extend(
+                [
+                    NumberFact(
+                        key=f"{estimate.driver_id}_coefficient",
+                        value=estimate.coefficient,
+                        unit="elasticity",
+                        method="driver regression",
+                    ),
+                    NumberFact(
+                        key=f"{estimate.driver_id}_low",
+                        value=estimate.confidence_interval[0],
+                        unit="elasticity",
+                        method="95% interval",
+                    ),
+                    NumberFact(
+                        key=f"{estimate.driver_id}_high",
+                        value=estimate.confidence_interval[1],
+                        unit="elasticity",
+                        method="95% interval",
+                    ),
+                    NumberFact(
+                        key=f"{estimate.driver_id}_agreement",
+                        value=estimate.agreement,
+                        unit="fraction",
+                        method="agreement between the two estimators",
+                    ),
+                ]
+            )
     return facts
 
 

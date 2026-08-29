@@ -26,6 +26,10 @@ LineageStage = Literal["land", "conform", "mart", "blend"]
 """The stages a KPI contract's own ``lineage`` block declares."""
 
 
+MIN_TOLERANCE_SCALE = 1e-6
+"""Floor on the tolerance scale, so a fact of exactly zero still has a usable band."""
+
+
 class NumberFact(StrictModel):
     """One number the system computed, with the method that produced it.
 
@@ -41,8 +45,15 @@ class NumberFact(StrictModel):
     tolerance: float = Field(default=0.05, ge=0.0)
 
     def matches(self, candidate: float) -> bool:
-        """Is a numeral in generated text this fact, within its stated tolerance?"""
-        scale = max(abs(self.value), 1.0)
+        """Is a numeral in generated text this fact, within its stated tolerance?
+
+        The tolerance is **relative to the fact's own value**, not to a scale floored
+        at one. Flooring it at one gives a fact of 0.62 an absolute band of +/-0.05,
+        which is eight percent — wide enough that a fabricated 0.631 passes as a
+        rounding of it. Measured: with the floored form, an injected "63.10%" verified
+        successfully against a 62% explained-variance fact.
+        """
+        scale = max(abs(self.value), MIN_TOLERANCE_SCALE)
         return abs(candidate - self.value) <= self.tolerance * scale
 
 

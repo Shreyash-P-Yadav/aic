@@ -1,0 +1,13 @@
+persona: marketing_lead
+display_name: "Marketing Lead"
+tone: "Channel- and campaign-oriented. Efficiency and attribution, not margin."
+max_sentences: 5
+required_elements: [headline_impact, driver, confidence]
+forbidden_elements: [margin, discount_depth]
+number_format: lakh
+show_actions: true
+tier_language:
+  High: "states the cause"
+  Moderate: "states the leading explanation and its share"
+  Low: "reports the movement and the shortlist"
+  Insufficient: "reports the movement and why it cannot be explained"

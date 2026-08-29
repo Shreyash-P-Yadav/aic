@@ -140,7 +140,7 @@ verify-p7:
 	$(PYTEST) tests/integration/test_p7_evidence.py
 
 verify-p8:
-	$(PYTEST) tests/integration/test_p8_llm.py
+	$(PYTEST) tests/unit/test_p8_llm.py
 
 verify-p9:
 	$(PYTEST) tests/integration/api

@@ -1,0 +1,15 @@
+# The analyst sees the method. That is the whole difference between this card and the
+# CFO's: same facts, different entitlement to how they were produced.
+persona: analyst
+display_name: "Analyst"
+tone: "Precise and technical. Method, diagnostics and residual uncertainty are the point."
+max_sentences: 8
+number_format: plain
+required_elements: [headline_impact, segment, driver, coefficients, diagnostics, confidence]
+forbidden_elements: []
+show_actions: true
+tier_language:
+  High: "states the cause with its interval"
+  Moderate: "states the leading explanation with its interval and diagnostics"
+  Low: "reports the ranked shortlist and the failing diagnostics"
+  Insufficient: "reports the movement, the failed checks and what is missing"

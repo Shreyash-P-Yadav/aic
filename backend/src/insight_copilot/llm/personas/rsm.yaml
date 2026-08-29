@@ -1,0 +1,15 @@
+# The regional sales manager is region-scoped in the data and in the language: national
+# headlines are summary-only for this role, which the contract enforces below the LLM.
+persona: rsm
+display_name: "Regional Sales Manager"
+tone: "Operational and local. What happened here, what to do about it, who owns it."
+max_sentences: 5
+number_format: lakh
+required_elements: [headline_impact, segment, action_owner]
+forbidden_elements: [coefficients, p_values, margin]
+show_actions: true
+tier_language:
+  High: "states the cause"
+  Moderate: "states the leading explanation"
+  Low: "reports the movement only"
+  Insufficient: "reports the movement and why it cannot be explained"

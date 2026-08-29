@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T21:40:00Z
-Current phase: P8
+Updated: 2026-08-29T22:30:00Z
+Current phase: P9
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -12,7 +12,7 @@ Current phase: P8
 | P5 | Landing zone, harness, ingestion | DONE | `make verify-p5` | PASS | 18 tests; 159 in the full suite; 90-sim-day replay completes; bulk load 2,521,085 rows with 21 quarantined by the `spend_inr` ceiling (P8); a 30-day replay lands 1,623 batches and misses 26; freshness green on every source against its own SLA schedule |
 | P6 | Engine: detection + attribution ladder | DONE | `make verify-p6` | PASS | 23 tests; **conformal p-values uniform on clean holdout (KS p = 0.716)**; only period 7 confirmed; outage detected 2026-03-06 at p = 0.0039; scenario week -14.03% against a -11.94% counterfactual truth; Adtributor puts `region=North` at rank 1 with bootstrap stability 0.96; Bennet residual 3.4e-08; price elasticity -1.63 against a planted -1.94 (15.9%); marketing elasticity not recovered — see Known issues |
 | P7 | Evidence, confidence, actions | DONE | `make verify-p7` | PASS | 17 tests in 50s; four separate abstention paths (stale feed, reconciliation breach, evidence floor, weak signal); post-dated decoy eliminated by the timing gate; six syndicated copies count as one independent source; Scenario C names `n = 18 against a 28-day floor`; expected impacts carry their interval; actions suppressed below Moderate |
-| P8 | LLM layer and verifiers | PENDING | `make verify-p8` | — | |
+| P8 | LLM layer and verifiers | DONE | `make verify-p8` | PASS | 31 tests in 0.34s with **no API key and no network**; an injected wrong number is caught and the narrator falls back to templates after two regenerations; uncited hypotheses dropped; a plan naming an undeclared dimension rejected; four persona style cards; cache hit on the second call; cost cap downshifts and logs it |
 | P9 | API | PENDING | `make verify-p9` | — | |
 | P10 | Frontend | PENDING | `make verify-p10` | — | |
 | P11 | Calibration backtest, learning, evals | PENDING | `make verify-p11` | — | |
@@ -315,7 +315,16 @@ Current phase: P8
 
 ## Phase plans
 
-### P8 plan (next)
+### P9 plan (next)
+
+1. `api/routers/` — the routes in the build prompt, every response a pydantic model.
+2. Session role switching that actually changes the data: the compiler's row filters and
+   column masks are already below the LLM, so a role change is a data fact.
+3. `ws.py` — the live event stream the landing-zone monitor and the demo controls use.
+4. `tests/integration/test_p9_api.py` — the gate, including the entitlement matrix
+   exercised through HTTP rather than through the compiler directly.
+
+### P8 plan (done)
 
 1. `llm/provider.py` — `LLMProvider` ABC with a mandatory `MockProvider` that runs the
    whole application offline, plus an Anthropic implementation behind the settings flag.

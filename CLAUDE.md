@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P8 — LLM layer and verifiers.** P0–P7 are DONE.
+**P9 — API.** P0–P8 are DONE.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.
@@ -70,7 +70,7 @@ backend/src/insight_copilot/
               evidence confidence calibration actions bundle pipeline
   contracts/catalogs/  governed action catalogs (revenue, supply, marketing)
   llm/        provider planner hypotheses narrate verify_numbers verify_entailment
-              templates router
+              templates router feedback personas/*.yaml
   learning/   feedback ranker calibrate case_library
   telemetry/  meter ledger
   api/        app.py routers/ schemas.py errors.py ws.py
