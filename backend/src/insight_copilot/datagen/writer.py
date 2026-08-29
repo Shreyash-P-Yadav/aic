@@ -19,12 +19,14 @@ from pathlib import Path
 import pandas as pd
 
 from insight_copilot.datagen.panel import SimulationPanel
+from insight_copilot.datagen.pipeline import GeneratedWorld, documents_frame
 from insight_copilot.datagen.simulate import Simulator
 from insight_copilot.logging import get_logger
 
 logger = get_logger(__name__)
 
 TRUTH_SUBDIR = "generated"
+SOURCES_SUBDIR = "sources"
 MANIFEST_NAME = "manifest.json"
 
 
@@ -91,6 +93,66 @@ def write_truth_tables(
     return GenerationResult(
         directory=directory, checksum=checksum, row_counts=row_counts, elapsed_seconds=elapsed
     )
+
+
+def write_sources(world: GeneratedWorld, data_dir: Path) -> dict[str, int]:
+    """Write every projected source and the corpus.
+
+    These are the *source extracts* — what each system would have exported, defects
+    included. They are what the landing zone replays in P5, and they are deliberately
+    separate from the L3 truth tables: nothing downstream of here is allowed to read
+    the truth.
+    """
+    directory = data_dir / SOURCES_SUBDIR
+    directory.mkdir(parents=True, exist_ok=True)
+    counts: dict[str, int] = {}
+    for source_id in world.frames.source_ids:
+        frame = world.frames[source_id]
+        frame.to_parquet(directory / f"{source_id}.parquet", index=False)
+        counts[source_id] = len(frame)
+
+    corpus = documents_frame(world.documents)
+    corpus.to_parquet(directory / "corpus_documents.parquet", index=False)
+    counts["corpus_documents"] = len(corpus)
+
+    reconciliation = pd.DataFrame(
+        [
+            {
+                "check": delta.name,
+                "left": delta.left,
+                "right": delta.right,
+                "median_pct": delta.median_pct,
+                "p95_pct": delta.p95_pct,
+                "designed_low": delta.designed_range[0],
+                "designed_high": delta.designed_range[1],
+                "in_designed_range": delta.in_designed_range,
+                "reason": delta.reason,
+            }
+            for delta in world.reconciliations
+        ]
+    )
+    reconciliation.to_parquet(directory / "_reconciliation.parquet", index=False)
+
+    evidence = world.catalog.detect_all(world.frames, world.context)
+    defects = pd.DataFrame(
+        [
+            {
+                "code": injector.code,
+                "title": injector.title,
+                "complexity": injector.complexity,
+                "exercises": injector.exercises,
+                "demo_moment": injector.demo_moment,
+                "structural": injector.structural,
+                "present": evidence[injector.code].present,
+                "detail": evidence[injector.code].detail,
+            }
+            for injector in world.catalog
+        ]
+    )
+    defects.to_parquet(directory / "_defect_catalog.parquet", index=False)
+
+    logger.info("datagen.sources_written", directory=str(directory), sources=len(counts))
+    return counts
 
 
 def _weather_frame(simulator: Simulator, panel: SimulationPanel) -> pd.DataFrame:

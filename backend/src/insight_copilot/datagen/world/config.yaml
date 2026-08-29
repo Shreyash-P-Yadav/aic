@@ -169,12 +169,17 @@ media:
   # brand channels (CTV, display) are less efficient per rupee in the short run.
   # Digital adstock half-life 5-10 days; shorter for performance, longer for brand.
   channels:
-    - {id: paid_social, budget_share: 0.30, elasticity: 0.044, adstock_half_life_days: 7,  cpm_inr: 210}
-    - {id: search,      budget_share: 0.26, elasticity: 0.042, adstock_half_life_days: 5,  cpm_inr: 340}
-    - {id: display,     budget_share: 0.14, elasticity: 0.014, adstock_half_life_days: 9,  cpm_inr: 120}
-    - {id: affiliate,   budget_share: 0.12, elasticity: 0.018, adstock_half_life_days: 6,  cpm_inr: 160}
-    - {id: influencer,  budget_share: 0.11, elasticity: 0.017, adstock_half_life_days: 10, cpm_inr: 280}
-    - {id: ctv,         budget_share: 0.07, elasticity: 0.008, adstock_half_life_days: 14, cpm_inr: 430}
+  # tactical_sensitivity: how far this channel's spend flexes with last week's
+  # revenue. Search and paid social can be re-pointed within the week; CTV is booked
+  # weeks ahead and barely moves. A single shared sensitivity would load the same
+  # tactical factor on every channel and correlate all six at ~0.9 in logs, leaving
+  # no media coefficient separately identifiable anywhere in the history.
+    - {id: paid_social, budget_share: 0.30, elasticity: 0.044, adstock_half_life_days: 7,  cpm_inr: 210, tactical_sensitivity: 1.15}
+    - {id: search,      budget_share: 0.26, elasticity: 0.042, adstock_half_life_days: 5,  cpm_inr: 340, tactical_sensitivity: 1.40}
+    - {id: display,     budget_share: 0.14, elasticity: 0.014, adstock_half_life_days: 9,  cpm_inr: 120, tactical_sensitivity: 0.85}
+    - {id: affiliate,   budget_share: 0.12, elasticity: 0.018, adstock_half_life_days: 6,  cpm_inr: 160, tactical_sensitivity: 1.00}
+    - {id: influencer,  budget_share: 0.11, elasticity: 0.017, adstock_half_life_days: 10, cpm_inr: 280, tactical_sensitivity: 0.45}
+    - {id: ctv,         budget_share: 0.07, elasticity: 0.008, adstock_half_life_days: 14, cpm_inr: 430, tactical_sensitivity: 0.20}
   annual_spend_share_of_revenue: 0.085
   # Endogeneity. The quarterly plan is exogenous; the tactical overlay responds to
   # last week's revenue against target. kappa is capped at 0.3 deliberately: any
@@ -184,7 +189,9 @@ media:
   # Paid social and display are run by one agency team and move together for two
   # quarters. This is the planted collinearity the VIF gate must group.
   collinear_pair: [paid_social, display]
-  collinear_window: ["2025-10-01", "2026-03-31"]
+  # Ends before Scenario A's paid-social cut (24 Feb 2026): that cut slashes one
+  # member of the pair and would decorrelate the very window under test.
+  collinear_window: ["2025-08-01", "2026-02-15"]
   collinear_rho: 0.80
   attributed_revenue_inflation: [1.05, 1.15]   # platform attribution vs order-linked
 

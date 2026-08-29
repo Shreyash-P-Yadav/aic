@@ -213,7 +213,7 @@ def _build_event(
         contradiction=documents > 1 and rng.random() < 0.10,
         syndication=int(rng.integers(1, 7)) if documents else 1,
         post_dated_decoy=rng.random() < 0.08,
-        effective_date_offset_days=int(rng.integers(5, 45)) if rng.random() < 0.20 else 0,
+        effective_date_offset_days=int(rng.integers(5, 45)) if rng.random() < 0.30 else 0,
     )
 
     # --- axis 4: data condition ---------------------------------------------------

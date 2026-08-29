@@ -95,24 +95,40 @@ def _cmd_generate(_: argparse.Namespace) -> int:
     """Simulate the world and write the L3 truth tables."""
     import time
 
-    from insight_copilot.datagen.simulate import Simulator
-    from insight_copilot.datagen.writer import write_truth_tables
+    from insight_copilot.datagen.pipeline import generate_world
+    from insight_copilot.datagen.writer import write_sources, write_truth_tables
 
     cfg = get_settings()
     cfg.ensure_dirs()
     try:
         started = time.perf_counter()
-        simulator = Simulator.from_defaults(cfg.seed)
-        panel = simulator.run()
+        world = generate_world(seed=cfg.seed)
         result = write_truth_tables(
-            simulator, panel, cfg.data_dir, elapsed=time.perf_counter() - started
+            world.simulator, world.panel, cfg.data_dir, elapsed=time.perf_counter() - started
         )
+        source_counts = write_sources(world, cfg.data_dir)
     except SimulationError as exc:
         print(f"FAIL  {exc.message}", file=sys.stderr)
         if exc.detail:
             print(exc.detail, file=sys.stderr)
         return 1
+
     print(result.summary())
+    print(f"OK    {len(world.frames.source_ids)} source extracts -> {cfg.data_dir / 'sources'}")
+    for name, count in sorted(source_counts.items()):
+        print(f"      {name:24s} {count:>10,} rows")
+
+    evidence = world.catalog.detect_all(world.frames, world.context)
+    detected = sum(1 for item in evidence.values() if item.present)
+    print(
+        f"OK    defect catalog: {detected}/{len(world.catalog)} pathologies present and detectable"
+    )
+    for delta in world.reconciliations:
+        status = "ok " if delta.in_designed_range else "OUT"
+        print(
+            f"      [{status}] {delta.name:34s} median {delta.median_pct:6.2f}% "
+            f"(designed {delta.designed_range[0]:.1f}-{delta.designed_range[1]:.1f}%)"
+        )
     print("      All data is simulated. Meridian Consumer Brands is a fictional company.")
     return 0
 

@@ -1,6 +1,6 @@
 # Build Progress
-Updated: 2026-08-29T06:35:21Z
-Current phase: P4
+Updated: 2026-08-29T07:12:53Z
+Current phase: P5
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -8,7 +8,7 @@ Current phase: P4
 | P1 | Contracts, security, audit | DONE | `make verify-p1` | PASS | 6 KPI + 11 source contracts validate; 40 tests green incl. the adversarial-injection and audit-completeness cases |
 | P2 | Datagen: world, latent, decisions, outcomes | DONE | `make verify-p2` | PASS | Determinism gate green (zero-magnitude event is byte-identical); 25 tests; annual Rs 853 cr, CV 0.230, AR(1) 0.394, ACF lag-7 0.332, BP 7.8e-10, LB 0.976, fill 0.985; generation 6.4 s |
 | P3 | Events and ground truth | DONE | `make verify-p3` | PASS | 19 tests; Shapley sums to the observed gap **bit-exactly** (0.000000000 INR residual across 113 groups); Scenario A moves -11.94% against a -12% target; 440 calibration events spread over all four axes; full ledger in 149 runs / 5m47s |
-| P4 | Source projection, defects, corpus | PENDING | `make verify-p4` | — | |
+| P4 | Source projection, defects, corpus | DONE | `make verify-p4` | PASS | 52 tests; 11 source extracts validated against their contracts; **31/31 pathologies present and detectable**; 704 documents; all four reconciliation deltas in their designed ranges; no real-looking PII anywhere |
 | P5 | Landing zone, harness, ingestion | PENDING | `make verify-p5` | — | |
 | P6 | Engine: detection + attribution ladder | PENDING | `make verify-p6` | — | |
 | P7 | Evidence, confidence, actions | PENDING | `make verify-p7` | — | |
@@ -49,6 +49,33 @@ Current phase: P4
   list does not mention it, and `artifacts/eval_report.md` plus the screenshots are
   named deliverables in the definition of done. Generated *data* (`data/`,
   `landing/`, `*.duckdb`, `*.parquet`) is ignored as specified.
+- **P4 — the corpus is template-generated, not LLM-generated.** The design proposes
+  generating ~150 scenario-critical documents once with a model and committing them as
+  reviewed fixtures. The freezing half is honoured — the corpus is deterministic,
+  generated from the ledger, and no model call is ever on the critical path — but the
+  generating half uses parameterised templates, because this build runs with
+  `LLM_PROVIDER=mock` and no API key is available. The cost is less linguistic variety
+  than a model would produce, and a judge reading the corpus will see templated prose.
+- **P4 — defect injectors come in two kinds, and nineteen of thirty-one are
+  structural.** Some pathologies are already realised by the design: different refresh
+  cadences live in the source contracts' cron expressions, fiscal-versus-ISO calendars
+  live in the KPI contracts, sparse history lives in the catalog. Injecting them again
+  would be inventing a defect on top of one that already exists. Both kinds implement
+  `detect()`, and detectability — not injection — is what the gate asserts.
+- **P4 — media channels gained a per-channel `tactical_sensitivity`.** As first built,
+  the endogenous budget response loaded identically on all six channels, correlating
+  every pair at ~0.9 in logs. No media coefficient would have been separately
+  identifiable anywhere in the history, and the one deliberately collinear pair was
+  invisible against that background. Search flexes weekly (1.40); CTV is booked ahead
+  (0.20).
+- **P4 — the collinear window moved to 2025-08-01 – 2026-02-15.** It previously ran to
+  31 Mar 2026 and so overlapped Scenario A's paid-social cut, which slashes one member
+  of the pair and decorrelated the very window under test.
+- **P4 — two analytical detectors exclude the quarantined unit-change weeks.** P8
+  multiplies one month of spend by a hundred; on levels that single spike correlates
+  all six media channels at 0.98 and hides everything else. Those rows breach the
+  source contract's declared maximum and would be quarantined at ingestion, so an
+  analytical detector must not be scored on them.
 - **P3 — counterfactuals are full re-runs, not warm-started windows.** The design
   proposes re-simulating only `[event_start-60d, event_end+60d]`, warm-started from
   the factual state, because a full re-run was assumed expensive. Here a full 36-month
@@ -173,7 +200,31 @@ Current phase: P4
 
 ## Phase plans
 
-### P4 plan (next)
+### P5 plan (next)
+
+1. `harness/clock.py` — `SimClock` with modes backfill / replay(N x) / live(1 x) / step.
+2. `harness/scheduler.py` — `ArrivalScheduler`: per source contract, cron + jitter +
+   failure probability + restatement batches.
+3. `harness/landing.py` — `LandingZone`: partitioned files plus a `manifest.json` per
+   batch (schema in DataLayer §10.2), and `SourceWatcher`.
+4. `harness/controls.py` — `DemoControls`: inject event, break feed, send restatement,
+   time-travel, reset.
+5. `ingest/` — bronze (immutable raw + `batch_id`, `received_at`, `sim_time`,
+   `row_hash`, `schema_version`), DQ gates from the source-contract expectations with
+   **quarantine, never drop**, silver (calendar spine, conformed dimensions, IST
+   normalisation, unit normalisation, currency conversion, dedup, PII masking), gold
+   (contract-grain marts, the dimensional cube, the driver panel).
+6. Watermarks per source; late batches rewind the watermark for their period only;
+   supersede-by-batch for restatements with prior versions retained; idempotency by
+   `(source_id, batch_id)` plus `row_hash`.
+7. `DataLandedEvent` waking **only** the KPIs whose contracts depend on that source.
+8. `tests/integration/test_p5_ingest.py` — the gate: 90 sim-days replay; a repeated
+   `batch_id` changes nothing; identical rows under a new `batch_id` are deduplicated;
+   a restatement supersedes with both versions queryable; pausing a feed flips
+   freshness green -> amber -> red on the SLA schedule; a late batch recomputes exactly
+   the affected window; the unit-change defect is quarantined by range expectations.
+
+### P4 plan (done)
 
 1. `datagen/projection/` — eleven `SourceProjector` subclasses. Full fidelity: OMS
    (order-line-day), WMS (T+2), MarTech (weekly Mon, 14-day restatement, 12-month

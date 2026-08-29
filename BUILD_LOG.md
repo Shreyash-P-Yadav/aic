@@ -499,3 +499,215 @@ events**, which is what turns 641 naive simulations into 149.
   ignored, so their true contribution is never consumed; computing it would add ~89
   events to a job that is already the most expensive step in the build.
 
+---
+
+## P4 — Source projection, defects, corpus · DONE
+
+**Built.**
+
+- `datagen/projection/` — nine tabular `SourceProjector` subclasses, each validated
+  against its own source contract at generation time (columns exactly as declared, no
+  extras, none missing). Full fidelity: **OMS** (order-line grain, midnight cut-off,
+  cancellations post-dating their orders), **WMS** (T+2 extract stamp, per-SKU inbound
+  delay), **MarTech** (weekly ISO, campaign split, attribution inflation, campaign-id
+  reuse, 12-month retention), **support tickets** (volume responding to lost units,
+  free text with PII, inconsistent tagging), **competitor prices** (~60% SKU coverage,
+  fuzzy match confidence, silent delistings, 14-month history). Lightweight: PIM
+  (late master updates), inventory snapshots, weather, holiday calendar.
+- `datagen/projection/runner.py` — the four **designed disagreements**, measured
+  rather than asserted-about.
+- `datagen/defects/` — **31 `DefectInjector` subclasses covering P1–P30** (P6 splits
+  into P6a and P6b as the design does), self-registering in a catalog and individually
+  toggleable. Split into `arrival`, `schema`, `quality`, `analytical`, `simpson` and
+  `evidence` modules. Twelve are *transformational* (they change the rows); nineteen
+  are *structural* (the design already realises them). **Both kinds implement
+  `detect()`**, and that is what the gate asserts: the catalog's contract is *present
+  AND detectable*, because a defect that exists but cannot be found would flatter the
+  engine by existing without ever being caught.
+- `datagen/corpus/` — 704 documents generated **from the event ledger**, so every one
+  is causally consistent with the numbers. `pii.py` generates realistic identifiers
+  that are never real (RFC 2606 reserved domains, a non-routable phone block) and
+  exposes the detector the gate uses to prove it.
+- `datagen/pipeline.py` — truth → projection → defects → corpus, in that order, as one
+  entry point. `make generate` now writes the truth tables, eleven source extracts,
+  the corpus, the reconciliation table and the defect catalog.
+
+**Gate:** `make verify-p4` — exit code 0.
+
+```
+.venv/bin/pytest tests/integration/test_p4_projection.py
+....................................................                     [100%]
+52 passed in 72.92s (0:01:12)
+```
+
+All 52 tests, named:
+
+```
+tests/integration/test_p4_projection.py::test_every_built_source_is_projected PASSED [  1%]
+tests/integration/test_p4_projection.py::test_every_projection_matches_its_source_contract PASSED [  3%]
+tests/integration/test_p4_projection.py::test_reconciliation_deltas_fall_in_their_designed_ranges[oms_units_vs_wms_units] PASSED [  5%]
+tests/integration/test_p4_projection.py::test_reconciliation_deltas_fall_in_their_designed_ranges[martech_attributed_vs_oms_linked] PASSED [  7%]
+tests/integration/test_p4_projection.py::test_reconciliation_deltas_fall_in_their_designed_ranges[inventory_snapshot_vs_implied] PASSED [  9%]
+tests/integration/test_p4_projection.py::test_reconciliation_deltas_fall_in_their_designed_ranges[competitor_match_confidence] PASSED [ 11%]
+tests/integration/test_p4_projection.py::test_martech_holds_only_twelve_months_of_history PASSED [ 13%]
+tests/integration/test_p4_projection.py::test_the_catalog_covers_every_pathology_in_the_design PASSED [ 15%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P1] PASSED [ 17%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P2] PASSED [ 19%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P3] PASSED [ 21%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P4] PASSED [ 23%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P5] PASSED [ 25%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P6a] PASSED [ 26%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P6b] PASSED [ 28%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P7] PASSED [ 30%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P8] PASSED [ 32%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P9] PASSED [ 34%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P10] PASSED [ 36%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P11] PASSED [ 38%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P12] PASSED [ 40%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P13] PASSED [ 42%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P14] PASSED [ 44%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P15] PASSED [ 46%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P16] PASSED [ 48%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P17] PASSED [ 50%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P18] PASSED [ 51%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P19] PASSED [ 53%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P20] PASSED [ 55%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P21] PASSED [ 57%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P22] PASSED [ 59%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P23] PASSED [ 61%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P24] PASSED [ 63%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P25] PASSED [ 65%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P26] PASSED [ 67%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P27] PASSED [ 69%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P28] PASSED [ 71%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P29] PASSED [ 73%]
+tests/integration/test_p4_projection.py::test_defect_is_present_and_detectable[P30] PASSED [ 75%]
+tests/integration/test_p4_projection.py::test_the_silent_unit_change_is_caught_by_a_range_expectation PASSED [ 76%]
+tests/integration/test_p4_projection.py::test_the_silent_unit_change_is_injected_not_incidental PASSED [ 78%]
+tests/integration/test_p4_projection.py::test_syndication_is_present_and_collapses_on_its_dedup_key PASSED [ 80%]
+tests/integration/test_p4_projection.py::test_corpus_size_is_in_the_designed_band PASSED [ 82%]
+tests/integration/test_p4_projection.py::test_about_fifteen_percent_of_events_get_no_document PASSED [ 84%]
+tests/integration/test_p4_projection.py::test_contradictory_pairs_exist PASSED [ 86%]
+tests/integration/test_p4_projection.py::test_post_dated_decoys_exist_and_post_date_their_events PASSED [ 88%]
+tests/integration/test_p4_projection.py::test_dual_dates_diverge_on_about_a_fifth_of_news_and_memos PASSED [ 90%]
+tests/integration/test_p4_projection.py::test_documents_are_causally_consistent_with_the_ledger PASSED [ 92%]
+tests/integration/test_p4_projection.py::test_no_document_contains_a_real_looking_personal_identifier PASSED [ 94%]
+tests/integration/test_p4_projection.py::test_no_ticket_contains_a_real_looking_personal_identifier PASSED [ 96%]
+tests/integration/test_p4_projection.py::test_every_synthetic_email_uses_a_reserved_domain PASSED [ 98%]
+tests/integration/test_p4_projection.py::test_pii_is_present_at_all PASSED [100%]
+```
+
+**`make generate`** (52 s end to end):
+
+```
+.venv/bin/python -m insight_copilot.cli generate
+OK    generated in 34.4s -> /home/user/aic/data/generated
+      checksum b59ba062b52bde49
+      calendar_spine                1,096 rows
+      fulfilment_daily            560,888 rows
+      media_weekly                  4,740 rows
+      product_master                  150 rows
+      sales_daily               1,720,298 rows
+      weather_daily                 5,480 rows
+OK    11 source extracts -> /home/user/aic/data/sources
+      competitor_prices            24,094 rows
+      corpus_documents                704 rows
+      holiday_calendar                 84 rows
+      inventory_snapshots         648,640 rows
+      martech_weekly                6,636 rows
+      news_articles                   277 rows
+      oms_orders                1,721,854 rows
+      pim_products                    150 rows
+      pricing_memos                   427 rows
+      support_tickets              60,181 rows
+      weather_daily                 5,480 rows
+      wms_fulfilment              560,888 rows
+OK    defect catalog: 31/31 pathologies present and detectable
+      [ok ] oms_units_vs_wms_units             median   1.95% (designed 0.5-8.0%)
+      [ok ] martech_attributed_vs_oms_linked   median  10.13% (designed 5.0-15.0%)
+      [ok ] inventory_snapshot_vs_implied      median   0.39% (designed 0.2-12.0%)
+      [ok ] competitor_match_confidence        median  13.38% (designed 2.0-40.0%)
+      All data is simulated. Meridian Consumer Brands is a fictional company.
+```
+
+**The full defect catalog, as measured:**
+
+```
+P1    structural  Different refresh cadences   cadences present: ['continuous', 'previous_day', 'previous_iso_week', 'static', 't_minus_2']
+P2    structural  Different grains             4 distinct grains across 4 sources
+P3    injected    Restatement                  168 restated rows, 84 with revised values
+P4    injected    Late arrival                 median extract lag 2.21 days
+P5    injected    Missing period               weeks absent from the feed: ['2026-W12', '2026-W13']
+P6a   structural  Duplicate delivery           11 sources declare batch_id idempotency
+P6b   injected    Silent duplication           1555 exactly-duplicated rows
+P7    injected    Schema drift                 42 weeks from 2025-11-03 deliver 'spend_amount' in place of 'spend_inr'
+P8    injected    Silent unit change           median spend inside the window is 94x the rest; 21 rows exceed the contract's declared maximum
+P9    injected    Timezone mismatch            2.1% of tickets carry a timestamp on a different calendar day from the one their id encodes, consistent with a UTC stamp against IST
+P10   structural  Definitional change          net_revenue is at contract v1.2.0 and its description states the shipping treatment explicitly
+P11   injected    Currency                     2836 order lines priced below Rs 20, consistent with a USD-denominated unit
+P12   injected    Null spike                   33.8% of rows lose their region in the window
+P13   structural  Unknown members              11574 order lines predate their SKU's product-master row
+P14   injected    Hierarchy change             'Central' is 20.0% of rows before the merge and 0.0% after
+P15   structural  Partial coverage             68.7% SKU coverage
+P16   structural  Fuzzy entity match           mean match confidence 0.848, 13.4% below 0.75
+P17   structural  Short external history       competitor history is 420 days against 1095 internal (0.38x)
+P18   structural  Fiscal vs ISO calendars      2 ISO weeks straddle a fiscal-year boundary
+P19   structural  Sparse history               1 SKU below the 28-day minimum, with 12 comparable launches to pool over
+P20   structural  Intermittent series          10 SKUs sell on fewer than 60% of days (worst 63.5% zero days)
+P21   injected    Legitimate outlier           one order line worth Rs 1.20 cr against a 99.99th-percentile line of Rs 2.5 lakh (49x)
+P22   structural  Regime break                 list prices step +5.96% at 2025-07-01
+P23   injected    Simpson's paradox            national margin moves +0.0084 while premium moves -0.0047 and mass moves -0.0097 - both segments decline and the total does not
+P24   structural  Collinear drivers            paid_social/display correlate 0.86 inside the window against 0.05 outside
+P25   structural  Endogeneity                  spend correlates 0.274 with prior-week revenue
+P26   structural  Syndicated duplicates        32 stories appear across 2-5 outlets; dedup by syndication_group collapses 54 rows
+P27   structural  PII in text                  285 of 4000 sampled tickets carry an email and 3566 a phone number, all synthetic
+P28   structural  Contradictory evidence       30 events carry contradictory documents (6.7%)
+P29   structural  Post-dated red herring       30 post-dated decoys (6.7%), including Scenario A's competitor announcement
+P30   structural  Clean control period         longest clean stretch is 35 days from 2023-09-01
+```
+
+**Realism bugs the gate caught**, each a genuine fault rather than a threshold that
+needed loosening:
+
+1. **MarTech campaign weights did not sum to 1.** Each campaign drew its own Dirichlet
+   and took one component, so a channel's weekly spend was multiplied by a noisy
+   factor around 1.0 and every downstream correlation was attenuated by an artefact of
+   the projection. One Dirichlet per (week, channel), indexed by campaign.
+2. **All six media channels correlated at ~0.9 in logs.** The tactical budget response
+   loaded identically on every channel, so no media coefficient would have been
+   separately identifiable anywhere in the history — and the one deliberately
+   collinear pair was invisible against that background. Channels now carry a
+   `tactical_sensitivity` (search 1.40 flexes weekly, CTV 0.20 is booked ahead).
+3. **The collinear window overlapped Scenario A's paid-social cut**, which slashes one
+   member of the pair and decorrelated the very window under test. Moved to
+   2025-08-01 – 2026-02-15, ending before the cut.
+4. **P8's 100x unit change drowned two analytical detectors.** On levels, one month of
+   hundredfold spend correlates every channel at 0.98. Both detectors now exclude the
+   weeks a range expectation would have quarantined, which is what a real pipeline
+   does before any analysis runs.
+5. **P9 was undetectable by its first test.** Shifting a near-uniform day back by 5.5
+   hours moves as much into the early window as out of it, so a
+   "share before 05:30" test barely moves. Replaced with the mismatch a silver-layer
+   conformance rule actually catches: the ticket id encodes an IST date and the
+   UTC-stamped timestamp falls on the previous calendar day.
+6. **P23 was not a paradox.** The national margin sat *between* the two segment moves,
+   which is ordinary aggregation. Strengthened to a genuine sign reversal: both
+   segments decline (−0.0047 premium, −0.0097 mass) while the national number
+   **rises** (+0.0084).
+
+**Deferred.**
+
+- **LLM-generated corpus text.** The design proposes generating the ~150
+  scenario-critical documents once with a model, reviewing them by hand, and
+  committing them as fixtures. The *freezing* half is honoured and is the important
+  half: the corpus is deterministic, generated from the ledger, and no model call is
+  ever on the critical path. The *generating* half uses parameterised templates
+  instead, because this build runs with `LLM_PROVIDER=mock` and no API key.
+  Cost: less linguistic variety than a model would give. Recorded as a deviation in
+  `BUILD_PROGRESS.md` rather than glossed over — a judge reading the corpus will see
+  templated prose.
+- **A committed `tests/fixtures/corpus/` directory.** Unnecessary given the above: the
+  corpus is a pure function of the ledger and the seed, so committing it would
+  duplicate what regeneration reproduces exactly. The determinism is what the fixtures
+  were for.
+

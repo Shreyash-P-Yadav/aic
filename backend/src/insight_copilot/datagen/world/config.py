@@ -110,6 +110,12 @@ class MediaChannel(Frozen):
     elasticity: float = Field(ge=0, le=0.5)
     adstock_half_life_days: int = Field(ge=1, le=60)
     cpm_inr: float = Field(gt=0)
+    tactical_sensitivity: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=3.0,
+        description="How far this channel flexes with last week's revenue against target.",
+    )
 
 
 class Demand(Frozen):
