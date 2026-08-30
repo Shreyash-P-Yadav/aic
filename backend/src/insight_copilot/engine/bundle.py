@@ -44,17 +44,33 @@ class NumberFact(StrictModel):
     method: str
     tolerance: float = Field(default=0.05, ge=0.0)
 
-    def matches(self, candidate: float) -> bool:
+    def matches(self, candidate: float, *, decimals: int | None = None) -> bool:
         """Is a numeral in generated text this fact, within its stated tolerance?
 
-        The tolerance is **relative to the fact's own value**, not to a scale floored
-        at one. Flooring it at one gives a fact of 0.62 an absolute band of +/-0.05,
-        which is eight percent — wide enough that a fabricated 0.631 passes as a
-        rounding of it. Measured: with the floored form, an injected "63.10%" verified
-        successfully against a 62% explained-variance fact.
+        Two admissible reasons for a numeral to differ from the fact, and no others:
+
+        * **Rounding to the precision it was written at.** ``decimals`` is how many
+          decimal places the numeral actually carried, and the fact matches when it
+          rounds to that numeral at that precision. This is what a RELATIVE tolerance
+          cannot express: rendering at two decimals is an absolute ±0.005, so the same
+          faithful rounding is a small relative error on 0.49 and a large one on 0.065.
+          Measured, and found by the P11 eval reporting numeric fidelity 0.941
+          intermittently: the template narrator prints the estimator agreement at two
+          decimals, and it verified on runs where that value happened to be large and
+          failed on runs where it was small — a verifier rejecting its own narrator for
+          writing a computed number down correctly.
+        * **The stated tolerance, relative to the fact's own value.** Relative, not to
+          a scale floored at one: flooring it gives a fact of 0.62 an absolute band of
+          ±0.05, which is eight percent — wide enough that a fabricated 0.631 passes as
+          a rounding of it. Measured: with the floored form, an injected "63.10%"
+          verified successfully against a 62% explained-variance fact.
         """
         scale = max(abs(self.value), MIN_TOLERANCE_SCALE)
-        return abs(candidate - self.value) <= self.tolerance * scale
+        if abs(candidate - self.value) <= self.tolerance * scale:
+            return True
+        if decimals is None:
+            return False
+        return round(self.value, decimals) == round(candidate, decimals)
 
 
 class FreshnessFact(StrictModel):
@@ -172,6 +188,20 @@ class InsightEvidenceBundle(StrictModel):
     numbers: list[NumberFact] = Field(default_factory=list)
     segments: list[SegmentFact] = Field(default_factory=list)
     price_effect: float | None = None
+    pvm_reference: float | None = None
+    """Revenue in the window the decomposition compares AGAINST.
+
+    Carried because the price/volume/mix split answers a different question from the
+    headline: it compares this window against the preceding one, while the headline
+    compares this window against its counterfactual. Anchoring the waterfall on the
+    counterfactual would produce an "unexplained" bar that is really just the distance
+    between two different comparisons, and a reader would take it for model error.
+    """
+    pvm_comparison: float | None = None
+    """Revenue in the window being decomposed. ``comparison - reference`` is exactly the
+    sum of the three Bennet terms; that is an arithmetic identity, not a fit."""
+    pvm_label: str = ""
+    """Which two windows were compared, in words, so the claim is legible."""
     volume_effect: float | None = None
     mix_effect: float | None = None
     drivers: list[DriverFact] = Field(default_factory=list)

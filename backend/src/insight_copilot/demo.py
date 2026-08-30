@@ -25,6 +25,7 @@ import numpy as np
 
 from insight_copilot.api.state import AppState, InsightRecord
 from insight_copilot.contracts.registry import ContractRegistry
+from insight_copilot.demo_ladder import build_rungs
 from insight_copilot.engine.attribute_where import Attributor, WhereResult
 from insight_copilot.engine.bundle import AbstentionArtifact, InsightEvidenceBundle
 from insight_copilot.engine.cube import CubeWindow, national_factor, segment_actual_forecast
@@ -119,16 +120,24 @@ def run_demo(state: AppState, world: object, warehouse: object) -> DemoResult:
         floor=contract.confidence_policy.evidence_floor,
     )
     freshness = _freshness(state)
+    rungs = build_rungs(warehouse, contract, SCENARIO_WINDOW)  # type: ignore[arg-type]
 
     result = InsightEngine().run(
         RunInputs(
             contract=contract,
             detection=detection,
             where=where,
+            why=rungs.why,
             evidence=evidence,
             freshness=freshness,
             history_days=len(series),
             period=SCENARIO_WINDOW,
+            price_effect=rungs.price_effect,
+            volume_effect=rungs.volume_effect,
+            mix_effect=rungs.mix_effect,
+            pvm_reference=rungs.reference_revenue,
+            pvm_comparison=rungs.comparison_revenue,
+            pvm_label=rungs.label,
             baseline_value=float(expected[held_out].sum()),
             lever_change=-0.08,
         ),

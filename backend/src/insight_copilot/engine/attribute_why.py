@@ -22,12 +22,14 @@ note saying so.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 from insight_copilot.contracts.models import KPIContract
@@ -239,14 +241,19 @@ class DriverAttributor:
         best, best_aic = ERROR_MODEL_CANDIDATES[0], np.inf
         for candidate in ERROR_MODEL_CANDIDATES:
             try:
-                fitted = SARIMAX(
-                    response,
-                    exog=matrix,
-                    order=candidate,
-                    trend="c",
-                    enforce_stationarity=False,
-                    enforce_invertibility=False,
-                ).fit(disp=False, maxiter=200)
+                with warnings.catch_warnings():
+                    # Order selection fits every candidate; a candidate that will not
+                    # converge is simply a candidate AIC will not pick, so its warning
+                    # is noise here rather than information.
+                    warnings.simplefilter("ignore", ConvergenceWarning)
+                    fitted = SARIMAX(
+                        response,
+                        exog=matrix,
+                        order=candidate,
+                        trend="c",
+                        enforce_stationarity=False,
+                        enforce_invertibility=False,
+                    ).fit(disp=False, maxiter=200)
             except (ValueError, np.linalg.LinAlgError):
                 continue
             if float(fitted.aic) < best_aic:
@@ -262,6 +269,14 @@ class DriverAttributor:
 
         The fallback is reported, never silent: an unconverged state-space model that
         quietly becomes an OLS is how a system claims a method it did not run.
+
+        Non-convergence is **captured rather than printed**. statsmodels raises a
+        ``ConvergenceWarning`` through the ``warnings`` machinery, which puts a stack
+        trace on stderr in the middle of a live demo. The information matters — it is
+        exactly why the state-space model is the cross-check and not the primary
+        estimator on a trended design — so it is redirected into the structured log,
+        where it is greppable and carries the run id, instead of being suppressed or
+        left to print.
         """
         try:
             model = SARIMAX(
@@ -272,7 +287,16 @@ class DriverAttributor:
                 enforce_stationarity=False,
                 enforce_invertibility=False,
             )
-            return model.fit(disp=False, maxiter=200)
+            with warnings.catch_warnings(record=True) as captured:
+                warnings.simplefilter("always", ConvergenceWarning)
+                fitted = model.fit(disp=False, maxiter=200)
+            for item in captured:
+                logger.info(
+                    "attribute_why.sarimax_convergence",
+                    order=order,
+                    detail=str(item.message),
+                )
+            return fitted
         except (ValueError, np.linalg.LinAlgError) as exc:
             logger.warning("attribute_why.sarimax_failed", error=str(exc))
             return _fit_hac(response, matrix)

@@ -63,6 +63,9 @@ class RunInputs:
     restatement_exposure: float = 0.0
     history_days: int = 0
     price_effect: float | None = None
+    pvm_reference: float | None = None
+    pvm_comparison: float | None = None
+    pvm_label: str = ""
     volume_effect: float | None = None
     mix_effect: float | None = None
     baseline_value: float = 0.0
@@ -160,6 +163,9 @@ class InsightEngine:
             numbers=numbers_for(inputs, confidence),
             segments=segments_for(inputs.where),
             price_effect=inputs.price_effect,
+            pvm_reference=inputs.pvm_reference,
+            pvm_comparison=inputs.pvm_comparison,
+            pvm_label=inputs.pvm_label,
             volume_effect=inputs.volume_effect,
             mix_effect=inputs.mix_effect,
             drivers=drivers_for(inputs.why),

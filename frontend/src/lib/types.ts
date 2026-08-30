@@ -132,6 +132,12 @@ export interface InsightBundle {
   numbers: NumberFact[];
   segments: SegmentFact[];
   price_effect: number | null;
+  /** Revenue in the window the price-volume-mix split compares AGAINST. */
+  pvm_reference: number | null;
+  /** Revenue in the window being decomposed. */
+  pvm_comparison: number | null;
+  /** Which two windows were compared, in words. */
+  pvm_label: string;
   volume_effect: number | null;
   mix_effect: number | null;
   drivers: DriverFact[];

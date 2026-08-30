@@ -340,6 +340,8 @@ def narration_section(score: NarrationScore) -> EvalSection:
                 direction="min",
                 unit="%",
                 n=score.numbers_checked,
+                detail="; ".join(score.unsupported)
+                or "every numeral in every narrative matched a computed fact",
             ),
             Measurement(
                 name="citation coverage",

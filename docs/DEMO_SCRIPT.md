@@ -17,7 +17,7 @@ Wait for these four lines. If any is missing, stop and read it rather than click
 
 ```
 OK    world loaded and 30 sim-days replayed: … batches, … rows
-OK    scenario run: net_revenue −41.46% on 2026-03-06 at p = 0.0026; tier Low
+OK    scenario run: net_revenue −41.46% on 2026-03-06 at p = 0.0026; tier Moderate
 OK    narrative cache pre-warmed: 4 narrative(s) cached in … ms
 OK    serving on http://127.0.0.1:8000 — all data is simulated
 ```
@@ -47,17 +47,21 @@ arrived."* Freshness is measured against each contract's own SLA, not a wall clo
 **Click:** the `net_revenue` card in the Feed.
 
 **Expect:** the insight detail. A headline of **−41.46%** against the counterfactual, a
-tier chip reading **Low**, and beneath it the attribution ladder.
+tier chip reading **Moderate**, and beneath it the attribution ladder — four rungs, one
+open at a time, starting on *Where*.
 
 **Say, walking down the ladder:**
 
 - **Where.** Adtributor scores every segment by explanatory power times a Jensen-Shannon
   surprise term, then bootstraps the ranking. The bootstrap stability is on screen — a
   segment that wins fewer than 90% of resamples is a shortlist entry, not a named cause.
-- **Kind.** The Bennet decomposition splits the movement into price, volume and mix.
-  **Point at:** the waterfall. The parts sum to the total exactly; that is an
-  arithmetic identity and it is property-tested, not asserted.
-- **Why.** Two estimators are fitted — SARIMAX with exogenous regressors, and OLS with
+- **Kind.** Click **What kind**. The Bennet decomposition splits the movement into
+  price, own-volume and mix. **Point at:** the waterfall, and at its caption — it is
+  anchored on *the previous window*, not on the counterfactual, because that is the
+  comparison this rung actually makes. The three parts sum to the change between those
+  two windows exactly; that is an arithmetic identity and it is property-tested, not
+  asserted.
+- **Why.** Click **Why**. Two estimators are fitted — SARIMAX with exogenous regressors, and OLS with
   Newey-West standard errors — and their *disagreement* is reported rather than resolved
   by picking a favourite.
 
@@ -65,6 +69,8 @@ tier chip reading **Low**, and beneath it the attribution ladder.
 
 **Expect:** every figure gains its method, its freshness, and its lineage. **Say:** "This
 is the fourth law. A claim you cannot trace is a claim you should not act on."
+
+- **Event.** Click **What event** for the documents that survived the timing gate.
 
 **Point at:** the evidence list, and specifically the rejected document. A competitor
 press release sits in the corpus dated *after* the effect began. The timing gate rejects

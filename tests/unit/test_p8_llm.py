@@ -328,3 +328,28 @@ def test_the_bundle_carries_everything_a_narrative_may_contain(
     assert isinstance(bundle.segments[0], SegmentFact)
     assert isinstance(bundle.actions[0], ActionFact)
     assert isinstance(bundle.confidence, ConfidenceFact)
+
+
+def test_a_number_rendered_at_its_own_precision_verifies() -> None:
+    """A small fact written at two decimals is that fact, faithfully rendered.
+
+    Found by the P11 eval, which reported numeric fidelity 0.941 on some runs and 1.000
+    on others. The template narrator prints the estimator agreement at two decimals, and
+    a RELATIVE tolerance cannot express a fixed rendering precision: rounding to two
+    decimals is an absolute band, so the identical rounding is inside 5% of 0.49 and
+    outside 5% of 0.065. The verifier now also accepts a numeral that IS the fact
+    rounded to the precision it was written at.
+    """
+    fact = NumberFact(key="agreement", value=0.0651, unit="fraction", method="two estimators")
+    assert fact.matches(0.07, decimals=2), "0.0651 written at two decimals IS 0.07"
+    assert not fact.matches(0.07), (
+        "on the relative tolerance alone this is a 7.5% error and would be rejected — "
+        "which is exactly the false failure the eval found"
+    )
+
+
+def test_rounding_never_admits_a_fabricated_number() -> None:
+    """The rounding rule is strictly tighter than the tolerance, never looser."""
+    fact = NumberFact(key="explained", value=0.62, unit="fraction", method="regression")
+    assert not fact.matches(0.70, decimals=2), "0.62 does not round to 0.70 at any precision"
+    assert not fact.matches(0.70)

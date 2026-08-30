@@ -85,6 +85,28 @@ test('the ask screen asks for clarification rather than guessing', async ({ page
   expect(body.length).toBeGreaterThan(20);
 });
 
+/**
+ * The insight detail screen is the ninth, and it is the one a judge spends longest on —
+ * the ladder, the waterfall, the confidence panel and the evidence list are all here.
+ * It has no fixed URL, so it is reached the way a reader reaches it: by clicking the
+ * first card in the feed. When the feed is empty (a cold start with no warehouse) there
+ * is nothing to capture and the loop skips it rather than shooting a 404.
+ */
+async function gotoFirstInsight(page: Page): Promise<boolean> {
+  await page.goto('/');
+  // Wait for the feed's own request to settle before looking: counting immediately
+  // after `goto` races the insights query and silently reports an empty feed on a
+  // machine that happens to be slow.
+  await page.waitForLoadState('networkidle');
+  const card = page.locator('a[href^="/insights/"]').first();
+  if ((await card.count()) === 0) {
+    return false;
+  }
+  await card.click();
+  await page.waitForLoadState('networkidle');
+  return true;
+}
+
 test('capture screenshots at both widths in both themes', async ({ page }) => {
   for (const width of [1440, 768]) {
     await page.setViewportSize({ width, height: width === 1440 ? 900 : 1024 });
@@ -95,6 +117,14 @@ test('capture screenshots at both widths in both themes', async ({ page }) => {
         await page.waitForLoadState('networkidle');
         await page.screenshot({
           path: `${SHOTS}/${screen.name}-${width}-${theme}.png`,
+          fullPage: true,
+        });
+      }
+      if (await gotoFirstInsight(page)) {
+        await setTheme(page, theme);
+        await page.waitForLoadState('networkidle');
+        await page.screenshot({
+          path: `${SHOTS}/insight-detail-${width}-${theme}.png`,
           fullPage: true,
         });
       }

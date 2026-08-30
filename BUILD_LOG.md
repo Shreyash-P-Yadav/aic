@@ -1511,3 +1511,56 @@ report can print it and the gate and the report cannot quote different numbers f
 same quantity. The planted value is read from `world/config.yaml` rather than
 transcribed. Measured: naive **0.0217**, DAG-specified **0.0662**, planted **0.1430** —
 **1.58x closer**, against a 1.5x target, n = 131 whole weeks.
+
+### P12 addendum — the ninth screen, rungs 2 and 3, and a false pass in the verifier
+
+Reviewing the captured screenshots against `docs/DEMO_SCRIPT.md` found that the script
+told a presenter to walk down the ladder and point at the waterfall, and the demo's
+flagship insight populated **rung 1 only**. Fixed by adding `demo_ladder.py`, which runs
+the Bennet decomposition and the driver regression on the same path. Four defects came
+out of doing it, each fixed at source:
+
+1. **The ninth screen was never captured.** The screenshot loop walked eight routes;
+   insight detail has no fixed URL, so it was missing — and it is the screen a judge
+   spends longest on. The E2E now reaches it the way a reader does, by clicking the
+   first card in the feed, and skips it when the feed is empty rather than shooting a
+   404.
+2. **statsmodels printed a `ConvergenceWarning` into the demo output.** The state-space
+   cross-check does not converge on a trended design — which is *why* it is the
+   cross-check and not the primary estimator — so the information matters and is now
+   redirected into the structured log rather than suppressed or left to print.
+3. **The waterfall was anchored on the wrong pair.** Rung 2 compares this window against
+   the preceding one; the headline compares it against its counterfactual. Anchoring the
+   waterfall on the counterfactual left an "unexplained" bar larger than the movement
+   itself, which a reader would take for model error. The bundle now carries the two
+   revenue totals the decomposition actually compares. Measured: price −926,696,
+   volume +22,614,746, mix +2,338,307, summing to +24,026,357 — **exactly** the change
+   between 09–15 Mar and 02–08 Mar.
+4. **The number verifier had a false pass, and the eval found it.** Numeric fidelity
+   came back 0.941 on some runs and 1.000 on others, on the same code. The offending
+   numeral was the estimator agreement, printed at two decimals: a *relative* tolerance
+   cannot express a fixed rendering precision, so the identical faithful rounding sits
+   inside 5% of 0.49 and outside 5% of 0.065. The verifier now also accepts a numeral
+   that IS the fact rounded to the precision it was written at — strictly tighter than
+   the tolerance, so it cannot admit a fabrication. `NumberFact.matches` takes the
+   written precision; `verify_numbers` reads it off the numeral rather than assuming it.
+   Two tests pin both directions.
+
+   The eval also now **names the offending numerals** in the report rather than only
+   reporting a rate: "numeric fidelity 0.941" is not actionable, and this is the metric
+   where one failure matters most.
+
+Five consecutive `make backtest` runs after the fix:
+
+```
+      PASS  numeric fidelity: 1.0000 (n = 34)
+      PASS  numeric fidelity: 1.0000 (n = 34)
+      PASS  numeric fidelity: 1.0000 (n = 34)
+      PASS  numeric fidelity: 1.0000 (n = 34)
+      PASS  numeric fidelity: 1.0000 (n = 34)
+```
+
+Populating rungs 2 and 3 also moved the flagship insight's tier from **Low to Moderate**,
+because `c3_statistical` is no longer measuring an absent regression. `docs/DEMO_SCRIPT.md`
+was updated to match — the expected tier chip, the expected startup line, and a click
+instruction for each rung.

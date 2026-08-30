@@ -175,9 +175,19 @@ def _best_match(number: ExtractedNumber, facts: list[NumberFact]) -> NumberFact 
     """
     for fact in facts:
         for candidate in _candidates(number, fact):
-            if fact.matches(candidate):
+            if fact.matches(candidate, decimals=_decimals(number)):
                 return fact
     return None
+
+
+def _decimals(number: ExtractedNumber) -> int:
+    """How many decimal places the numeral was actually written at.
+
+    Read off the text rather than assumed, because it is the precision the *writer*
+    chose that bounds how far the rendered value may sit from the computed one.
+    """
+    digits = number.raw.replace(",", "").split(".")
+    return len(digits[1].rstrip("%x ")) if len(digits) > 1 else 0
 
 
 def _candidates(number: ExtractedNumber, fact: NumberFact) -> list[float]:

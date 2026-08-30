@@ -95,26 +95,36 @@ function WhereRung({ bundle }: { bundle: InsightBundle }) {
 }
 
 function KindRung({ bundle }: { bundle: InsightBundle }) {
-  if (bundle.price_effect === null || bundle.volume_effect === null || bundle.mix_effect === null) {
+  if (
+    bundle.price_effect === null ||
+    bundle.volume_effect === null ||
+    bundle.mix_effect === null ||
+    bundle.pvm_reference === null ||
+    bundle.pvm_comparison === null
+  ) {
     return <EmptyState title="No price-volume-mix decomposition was computed for this window." />;
   }
-  const parts = bundle.price_effect + bundle.volume_effect + bundle.mix_effect;
-  const unexplained = bundle.delta - parts;
+  // Anchored on the two windows the decomposition ACTUALLY compares, not on the
+  // counterfactual. This rung answers a different question from the headline — "of the
+  // change from the previous window to this one, how much was price, volume and mix" —
+  // and anchoring it on the counterfactual would leave a residual bar that is really
+  // just the distance between two different comparisons. A reader would read that as
+  // model error.
   const steps: WaterfallStep[] = [
-    { label: 'Counterfactual', value: bundle.counterfactual, kind: 'anchor' },
+    { label: 'Previous window', value: bundle.pvm_reference, kind: 'anchor' },
     { label: 'Price', value: bundle.price_effect, kind: 'delta' },
     { label: 'Volume', value: bundle.volume_effect, kind: 'delta' },
     { label: 'Mix', value: bundle.mix_effect, kind: 'delta' },
-    { label: 'Unexplained', value: unexplained, kind: 'delta' },
-    { label: 'Observed', value: bundle.observed, kind: 'anchor' },
+    { label: 'This window', value: bundle.pvm_comparison, kind: 'anchor' },
   ];
   return (
     <div className="space-y-2">
       <Waterfall steps={steps} />
       <p className="text-xs text-ink-muted">
-        The Bennet indicator is exact: price, volume and mix sum to the change with no residual
-        term. Anything labelled unexplained here is the gap between the decomposition window and the
-        detection window, and it is shown rather than absorbed.
+        {bundle.pvm_label ? `${bundle.pvm_label}. ` : ''}
+        The Bennet indicator is exact: price, volume and mix sum to the change between these two
+        windows with no residual term. This is a different comparison from the headline, which is
+        measured against the counterfactual rather than against the previous window.
       </p>
     </div>
   );

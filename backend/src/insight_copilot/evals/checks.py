@@ -39,6 +39,13 @@ class NarrationScore:
     cited_claims: int
     total_claims: int
     dropped_claims: int = 0
+    unsupported: tuple[str, ...] = ()
+    """Every numeral that matched no evidence fact, as it appeared, with its persona.
+
+    Carried because "numeric fidelity 0.94" is not actionable and this metric is the
+    one where a single failure matters most. Naming the offending numerals turns a
+    recurrence into a diagnosis instead of a re-run.
+    """
 
     @property
     def numeric_fidelity(self) -> float:
@@ -79,6 +86,7 @@ def score_narration(
     itself proves nothing.
     """
     narrated = checked = verified = cited = claims = dropped = 0
+    unsupported: list[str] = []
     for bundle in bundles:
         for persona in personas:
             narrative = narrator.narrate(bundle, persona)
@@ -86,6 +94,9 @@ def score_narration(
             result = verify(narrative.text, bundle)
             checked += len(result.numbers)
             verified += len(result.matched)
+            unsupported.extend(
+                f"{persona}: {item.raw!r} ({item.value:g})" for item in result.unsupported
+            )
         if proposer is not None and registry is not None:
             # Coverage is over PUBLISHED claims and their citation must resolve to a
             # document actually in the bundle: a kept hypothesis citing something the
@@ -104,6 +115,7 @@ def score_narration(
         cited_claims=cited,
         total_claims=claims,
         dropped_claims=dropped,
+        unsupported=tuple(unsupported),
     )
 
 
