@@ -75,15 +75,25 @@ The system correctly finds North, worth ₹-1.00 crore, with 96% stability. It s
 
 *(screenshot: insight detail)*
 
-### WORKING — it refuses to answer when it can't
-Break the marketing data feed from the Admin screen. Freshness turns amber, then red.
-The system stops explaining and says what is missing and what would have to arrive for
-an answer to be possible. **This is a designed output, not an error.**
+### BUILT AND TESTED, NOT YET ON SCREEN — it refuses to answer when it can't
+The system has four separate triggers for declining to answer — a stale data feed, two
+sources that disagree, no supporting evidence, or a signal too weak to trust. All four
+are built and covered by seventeen automated tests.
 
-### WORKING — it stays quiet when it should
-A new product with only 18 days of history: not enough to judge, so it says nothing.
-A movement that is real but too small to matter: silence. Being statistically real is
-not the same as being worth someone's time.
+**Be careful how this is presented.** The refusal logic works, but it is not yet wired
+to a button in the demo, so it cannot be shown happening live. Say "built and tested",
+show the test result if asked, and put "connect it to the interface" in the roadmap.
+*Estimated: one day of work.*
+
+### BUILT AND TESTED, NOT YET ON SCREEN — it stays quiet when it should
+A new product with only 18 days of history is not enough to judge, so the system says
+nothing. A movement that is real but too small to matter gets silence. Both rules are
+implemented and tested; neither appears as a visible card in the current demo.
+
+### WORKING — a live control that re-runs the world
+On the Admin screen, "Inject event" replays the simulated world through a planted
+warehouse failure. 595 data batches physically land and are processed, and the simulated
+clock moves. This is not an animation — the pipeline genuinely runs.
 
 ### WORKING — five job roles see genuinely different data
 Switch from CFO to Regional Manager and other regions' data physically disappears, and
@@ -114,8 +124,8 @@ statistics were never dependent on the AI — this proves it.
 | 2 | Business definitions held as contracts | Yes — 6 KPI + 11 source contracts |
 | 3 | 2+ personas with different narratives | 4 personas |
 | 4 | A movement with several causes | Scenario A |
-| 5 | A refusal to answer | Scenario B |
-| 6 | A too-little-history case | Scenario C |
+| 5 | A refusal to answer | Built + 17 tests; **not yet visible in the UI** |
+| 6 | A too-little-history case | Built + tested; **not yet visible in the UI** |
 | 7 | Role-based data restriction | 5 roles |
 | 8 | Evidence: freshness, method, contribution, confidence, lineage | On every insight |
 | 9 | Clear split of AI vs computed | The Provenance toggle |
@@ -155,10 +165,17 @@ and well-known problem in the industry. Our method gets **1.58× closer to the t
 answer than the naive approach**, but not to the exact figure. We report the uncertainty
 rather than hiding it.
 
+**The refusal path is not connected to the interface.** The logic is built and tested,
+but the "Break a feed" button reports success without producing a visible change. This
+is the single most important gap, because refusing to answer is one of our strongest
+claims. *Roughly one day of work.*
+
 **Three screens are incomplete:**
-- **Admin** has 2 of 4 planned controls and no clock control
+- **Admin** has 1 working control of 4 planned, and no clock control
 - **Data & Sources** was meant to stream arrivals live; it currently refreshes on load
-- **Trust** correctly says "not yet fitted" but therefore shows no chart
+- **Trust** correctly says "not yet fitted" and therefore shows no chart
+- **Actions** is empty by design — actions are suppressed below High confidence, and
+  nothing reaches High while the calibration is unadopted
 
 **Not yet real-world tested.** Everything runs on simulated data. Connecting a real
 warehouse is a configuration change, not a rebuild — but it has not been done.
@@ -192,5 +209,9 @@ accuracy figures at all instead of just showing a demo that looks convincing.
   tools cannot do this.
 - Do **not** claim the confidence score is calibrated. Claim the opposite, and frame it
   as evidence of honesty. It is our most defensible story.
-- Suggested screenshot order: feed → insight detail → confidence panel → abstention →
-  role switch → audit → telemetry.
+- Suggested screenshot order: feed → insight detail → chart → confidence panel →
+  role switch → audit → telemetry. **There is no abstention screenshot** — that path is
+  tested but not visible in the interface yet.
+- Do not write "four scenarios demonstrated". One is demonstrated live; the other three
+  are built and tested but not shown on screen. `docs/DEMO_SCRIPT.md` has the exact
+  wording for each.

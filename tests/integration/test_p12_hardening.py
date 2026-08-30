@@ -259,3 +259,21 @@ def test_the_demo_path_emits_no_python_warnings(
             client.get("/api/insights")
     ours = [item for item in caught if "insight_copilot" in str(item.filename)]
     assert ours == [], f"the demo path emitted {[str(item.message) for item in ours]}"
+
+
+def test_the_inject_event_control_reads_a_field_that_exists() -> None:
+    """The control returned a 500 on every click: it read ``event.kind``, and the field
+    is ``event.type``.
+
+    Pinned because a demo control that throws is worse than one that does not exist —
+    a presenter finds out on stage, in front of the people being persuaded.
+    """
+    from insight_copilot.datagen.events.models import Event, EventWindow
+
+    event = Event(
+        event_id="EV-TEST",
+        type="outage",
+        window=EventWindow(start=dt.date(2026, 3, 6), end=dt.date(2026, 3, 12)),
+    )
+    assert event.type == "outage"
+    assert not hasattr(event, "kind"), "the attribute the control used never existed"

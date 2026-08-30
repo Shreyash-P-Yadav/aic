@@ -96,7 +96,7 @@ class DemoControls:
         return ControlOutcome(
             control="inject_event",
             detail=(
-                f"{event_id} ({event.kind}) replayed over "
+                f"{event_id} ({event.type}) replayed over "
                 f"{event.window.start}..{event.window.end}; {summary.landed} batches landed"
             ),
             sim_time=self._harness.clock.now,
