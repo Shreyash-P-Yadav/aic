@@ -71,9 +71,13 @@ class InsightSummary(BaseModel):
     delta_pct: float
     created_at: str
     headline: str
-    impact_inr: float | None = None
-    """The rupee impact. Spec-mandated on the card and previously missing, which left
-    a reader with a percentage and no sense of what it was worth."""
+    impact: float | None = None
+    """The KPI's own movement in its own unit. Spec-mandated on the card and previously
+    missing, which left a reader with a percentage and no sense of what it was worth."""
+    unit: str = "INR"
+    """The unit ``impact`` is measured in. Sent because the card was rendering a count
+    of units as "Rs -21,082" — the same class of error the number verifier caught in the
+    narration, and one a UI has no way to avoid without being told the unit."""
     top_segment: str | None = None
     """The leading segment, so the card answers "where" without a click."""
     spark: list[float] = Field(default_factory=list)

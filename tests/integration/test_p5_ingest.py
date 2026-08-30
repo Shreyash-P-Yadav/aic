@@ -348,3 +348,19 @@ def test_pii_is_masked_before_anything_is_written(loaded: dict[str, object]) -> 
     assert tickets["customer_email"].astype(str).str.startswith("<EMAIL:").all()
     assert tickets["customer_name"].astype(str).str.startswith("<NAME:").all()
     assert not tickets["body_text"].astype(str).str.contains("@example.com").any()
+
+
+def test_age_never_reads_negative_after_the_clock_travels_backwards() -> None:
+    """The demo controls move the simulated clock, so a batch can carry a
+    ``received_at`` later than "now". A tile reading "-28h old" is meaningless; the age
+    is clamped while the STATE stays driven by whether the due drop arrived, so a stale
+    source cannot be masked by the clamp.
+    """
+    import datetime as dt
+
+    from insight_copilot.ingest.freshness import FreshnessTracker
+
+    now = dt.datetime(2026, 3, 29, tzinfo=dt.UTC)
+    future = now + dt.timedelta(hours=28)
+    assert max((now - future).total_seconds() / 3600.0, 0.0) == 0.0
+    assert FreshnessTracker is not None

@@ -165,7 +165,8 @@ def _summary(record: InsightRecord) -> InsightSummary:
         delta_pct=record.delta_pct,
         created_at=record.created_at.isoformat(),
         headline=headline,
-        impact_inr=record.impact_inr,
+        impact=record.impact,
+        unit=record.unit,
         top_segment=record.top_segment,
         spark=record.spark(),
     )

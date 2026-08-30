@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
 import { Sparkline } from '@/components/Sparkline';
-import { inr, pct, when } from '@/lib/format';
+import { pct, quantity, when } from '@/lib/format';
 import type { InsightSummary } from '@/lib/types';
 import {
   Card,
@@ -107,8 +107,10 @@ function InsightCard({ insight }: { insight: InsightSummary }) {
           <p className="text-2xl font-semibold text-ink">
             {abstained ? 'Not attributed' : pct(insight.delta_pct)}
           </p>
-          {insight.impact_inr !== null ? (
-            <p className="tnum mt-0.5 text-sm text-ink-secondary">{inr(insight.impact_inr)}</p>
+          {insight.impact !== null ? (
+            <p className="tnum mt-0.5 text-sm text-ink-secondary">
+              {quantity(insight.impact, insight.unit)}
+            </p>
           ) : null}
         </div>
         {/* Shape only, and only when there is history to show. A sparkline drawn from

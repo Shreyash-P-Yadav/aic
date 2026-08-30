@@ -71,7 +71,12 @@ class FreshnessTracker:
             )
 
         received = _as_aware(latest["received_at"], now.tzinfo)
-        age_hours = (now - received).total_seconds() / 3600.0
+        # Clamped at zero. The demo controls travel the simulated clock, so a batch can
+        # legitimately carry a `received_at` LATER than the current instant — and a tile
+        # reading "-28h old" tells a reader nothing except that something is broken.
+        # The STATE is unaffected: it is computed from whether the due drop arrived, not
+        # from this number, so clamping the display cannot mask a stale source.
+        age_hours = max((now - received).total_seconds() / 3600.0, 0.0)
         overdue_hours = max((now - due_at).total_seconds() / 3600.0, 0.0)
         state = self._state(received >= due_at, overdue_hours, sla)
         return FreshnessStatus(

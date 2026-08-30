@@ -32,9 +32,12 @@ export interface InsightSummary {
   delta_pct: number;
   created_at: string;
   headline: string;
-  /** Rupee impact. Null on an abstention — there is no impact to quote for a movement
-   *  the system declined to attribute. */
-  impact_inr: number | null;
+  /** The movement in the KPI's own unit. Null on an abstention — there is no impact to
+   *  quote for a movement the system declined to attribute. */
+  impact: number | null;
+  /** The unit `impact` is in. "INR" renders as crore/lakh; anything else renders as a
+   *  plain count with the unit named. */
+  unit: string;
   /** The leading segment, so the card answers "where" without a click. */
   top_segment: string | null;
   /** Recent actuals for the card's sparkline; empty when no series was attached. */

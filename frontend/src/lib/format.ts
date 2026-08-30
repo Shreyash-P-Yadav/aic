@@ -17,6 +17,19 @@ export function inr(value: number): string {
   return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * A quantity in its own unit.
+ *
+ * Only rupees get crore and lakh. A count of units rendered as "₹-21,082" is wrong, and
+ * it is the same mistake the number verifier caught in the narration layer — a UI has
+ * no way to avoid it unless the API tells it the unit.
+ */
+export function quantity(value: number, unit: string): string {
+  if (unit === 'INR') return inr(value);
+  if (unit === 'percent') return `${value.toFixed(2)}pp`;
+  return `${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })} ${unit}`;
+}
+
 /** A signed percentage, always with its direction visible. */
 export function pct(value: number, digits = 2): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`;

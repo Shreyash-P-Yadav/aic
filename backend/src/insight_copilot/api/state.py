@@ -82,10 +82,18 @@ class InsightRecord:
         return self.bundle.delta_pct if self.bundle else 0.0
 
     @property
-    def impact_inr(self) -> float | None:
-        """The rupee impact, for the card. ``None`` on an abstention: there is no
+    def impact(self) -> float | None:
+        """The movement in the KPI's own unit. ``None`` on an abstention: there is no
         impact to quote for a movement the system declined to attribute."""
         return self.bundle.delta if self.bundle else None
+
+    @property
+    def unit(self) -> str:
+        """The unit ``impact`` is in, read from the bundle's own ``delta`` fact."""
+        if self.bundle is None:
+            return "INR"
+        fact = self.bundle.fact("delta")
+        return fact.unit if fact else "INR"
 
     @property
     def top_segment(self) -> str | None:
