@@ -291,3 +291,50 @@ export interface KpiSeries {
   window_start: string | null;
   window_end: string | null;
 }
+
+/** One measured number from the backtest, against its stated target. */
+export interface EvalMeasurement {
+  section: string;
+  name: string;
+  value: number;
+  target: number | null;
+  direction: string;
+  unit: string;
+  n: number;
+  detail: string;
+  verdict: string;
+}
+
+/** One bin of the reliability curve, always carrying its count. */
+export interface ReliabilityBin {
+  lower: number;
+  upper: number;
+  n: number;
+  mean_score: number;
+  hit_rate: number;
+}
+
+/** One tier's observed hit rate in the backtest. */
+export interface TierRow {
+  tier: string;
+  n: number;
+  hit_rate: number;
+  mean_score: number;
+  boundary: number;
+}
+
+/** The backtest report, or an honest statement that none has been run. */
+export interface EvalReport {
+  available: boolean;
+  generated_at: string | null;
+  corpus_events: number;
+  fit_events: number;
+  holdout_events: number;
+  cut_date: string | null;
+  tier_basis: string;
+  measurements: EvalMeasurement[];
+  reliability: ReliabilityBin[];
+  tiers: TierRow[];
+  notes: string[];
+  detail: string;
+}

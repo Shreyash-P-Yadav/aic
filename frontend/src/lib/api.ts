@@ -11,6 +11,7 @@ import type {
   AuditEntry,
   CalibrationResponse,
   DQResponse,
+  EvalReport,
   EvidenceDrawer,
   FreshnessResponse,
   InsightPayload,
@@ -101,6 +102,7 @@ export const api = {
   calibration: (signal?: AbortSignal) =>
     request<CalibrationResponse>('/api/calibration', { signal }),
   audit: (signal?: AbortSignal) => request<AuditEntry[]>('/api/audit', { signal }),
+  evals: (signal?: AbortSignal) => request<EvalReport>('/api/evals', { signal }),
   demo: (control: 'inject-event' | 'break-feed' | 'restore-feed', target: string) =>
     request<{ control: string; detail: string; sim_time: string }>(`/api/demo/${control}`, {
       method: 'POST',

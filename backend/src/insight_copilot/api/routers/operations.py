@@ -8,6 +8,7 @@ separate "monitoring" store that could drift from what happened.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from pydantic import ValidationError
 
 from insight_copilot.api.deps import get_state
 from insight_copilot.api.schemas import (
@@ -15,14 +16,24 @@ from insight_copilot.api.schemas import (
     BatchSummary,
     CalibrationResponse,
     DQResponse,
+    EvalMeasurement,
+    EvalReportResponse,
     FreshnessResponse,
+    ReliabilityBin,
     SourceSummary,
     TelemetryResponse,
+    TierRow,
 )
 from insight_copilot.api.state import AppState
 from insight_copilot.ingest.dq_store import DQStore
 from insight_copilot.ingest.registry import BatchRegistry
 from insight_copilot.ingest.warehouse import Warehouse
+from insight_copilot.logging import get_logger
+
+logger = get_logger(__name__)
+
+EVAL_REPORT_FILE = "eval_report.json"
+"""The artifact the eval suite writes. Served, never recomputed on request."""
 
 router = APIRouter(tags=["operations"])
 
@@ -137,6 +148,65 @@ async def calibration(state: AppState = Depends(get_state)) -> CalibrationRespon
             if fitted.fitted
             else "not yet fitted; composite scores are reported raw and labelled uncalibrated"
         ),
+    )
+
+
+@router.get("/api/evals", response_model=EvalReportResponse)
+async def evals(state: AppState = Depends(get_state)) -> EvalReportResponse:
+    """The backtest report, or an honest statement that none has been run.
+
+    ``available: false`` is a first-class answer, not an error. A fresh clone has run no
+    backtest, and a Trust screen that invented a curve for that state would be doing the
+    exact thing this system exists to prevent.
+
+    Served from the artifact the eval suite wrote rather than recomputed per request: a
+    backtest is a seven-minute job over 416 events, and a screen that recomputed it on
+    every page view would misrepresent what it costs to know this.
+    """
+    from insight_copilot.evals.models import EvalReport
+
+    path = state.settings.artifacts_dir / EVAL_REPORT_FILE
+    if not path.exists():
+        return EvalReportResponse(
+            available=False,
+            detail=(
+                "no backtest has been run in this workspace; "
+                "`make generate-truth && make backtest` writes one"
+            ),
+        )
+    try:
+        report = EvalReport.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        logger.warning("api.eval_report_unreadable", error=str(exc))
+        return EvalReportResponse(available=False, detail=f"the report could not be read: {exc}")
+
+    return EvalReportResponse(
+        available=True,
+        generated_at=report.generated_at.isoformat(),
+        corpus_events=report.corpus_events,
+        fit_events=report.fit_events,
+        holdout_events=report.holdout_events,
+        cut_date=report.cut_date.isoformat() if report.cut_date else None,
+        tier_basis=report.tier_basis,
+        measurements=[
+            EvalMeasurement(
+                section=section.name,
+                name=item.name,
+                value=item.value,
+                target=item.target,
+                direction=item.direction,
+                unit=item.unit,
+                n=item.n,
+                detail=item.detail,
+                verdict=item.verdict,
+            )
+            for section in report.sections
+            for item in section.measurements
+        ],
+        reliability=[ReliabilityBin.model_validate(row.model_dump()) for row in report.reliability],
+        tiers=[TierRow.model_validate(row.model_dump()) for row in report.tiers],
+        notes=report.notes,
+        detail=f"{len(report.measurements)} measurements from the backtest",
     )
 
 

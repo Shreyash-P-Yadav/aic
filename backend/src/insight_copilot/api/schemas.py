@@ -224,6 +224,64 @@ class CalibrationResponse(BaseModel):
     detail: str
 
 
+class EvalMeasurement(BaseModel):
+    """One measured number against its stated target."""
+
+    section: str = ""
+    """Which area of the system this measures. Carried through so twenty-five rows can
+    be grouped on screen instead of read as one undifferentiated list."""
+    name: str
+    value: float
+    target: float | None = None
+    direction: str = "max"
+    unit: str = ""
+    n: int = 0
+    detail: str = ""
+    verdict: str = "—"
+
+
+class ReliabilityBin(BaseModel):
+    """One bin of the reliability curve, always carrying its own count."""
+
+    lower: float
+    upper: float
+    n: int
+    mean_score: float
+    hit_rate: float
+
+
+class TierRow(BaseModel):
+    """One tier's observed hit rate in the backtest, with its count."""
+
+    tier: str
+    n: int
+    hit_rate: float
+    mean_score: float
+    boundary: float
+
+
+class EvalReportResponse(BaseModel):
+    """The backtest, as the Trust screen renders it.
+
+    Served from the artifact the eval suite wrote rather than recomputed on request: a
+    backtest is a seven-minute job over 416 events, and a screen that recomputed it per
+    page view would be lying about what it costs to know this.
+    """
+
+    available: bool
+    generated_at: str | None = None
+    corpus_events: int = 0
+    fit_events: int = 0
+    holdout_events: int = 0
+    cut_date: str | None = None
+    tier_basis: str = ""
+    measurements: list[EvalMeasurement] = Field(default_factory=list)
+    reliability: list[ReliabilityBin] = Field(default_factory=list)
+    tiers: list[TierRow] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    detail: str = ""
+
+
 class AuditEntry(BaseModel):
     """One audited action."""
 
