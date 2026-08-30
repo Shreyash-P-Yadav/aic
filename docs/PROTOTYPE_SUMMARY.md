@@ -122,8 +122,20 @@ marketing lead. Same numbers, different emphasis.
 Every query, who ran it, under which role, what it returned. **A refusal is logged as
 carefully as an answer.**
 
-### WORKING — cost tracking
-Cost per insight, cache hit rate, and how often it fell back to a cheaper model.
+### WORKING — cost tracking, per insight
+Every model call is metered against the insight it was made for and priced from the
+tokens it actually used. The screen shows insights metered, mean cost per insight in
+rupees, model calls and cache hit rate. Running offline the calls are free, so the
+figure is what the same work *would* cost at list rates — a modelled number from real
+usage, and the screen says so.
+
+### WORKING — a Trust screen with the real backtest
+25 measured metrics grouped by area (calibration, attribution, detection, endogeneity,
+narrative, entitlements, budgets), each with its target, its sample size and a PASS/FAIL
+verdict. Plus the reliability curve — dot size is the number of events in each bin — and
+the per-tier table showing observed hit rates, with empty tiers displayed rather than
+hidden. **This screen shows four FAILs.** That is deliberate: see section 8.
+*(screenshot: trust)*
 
 ### WORKING — it runs with no AI provider at all
 With the AI switched off, the whole product still works using written templates. The
@@ -157,7 +169,7 @@ All measured, not estimated.
 | Price/volume/mix split accuracy | Exact to 8 decimal places |
 | Ground-truth accounting error | **₹0.000000000** across 113 event groups |
 | Time to produce an insight | Under 1 second |
-| Cost per insight | Tracked; zero offline |
+| Cost per insight | ₹1.08 modelled from real token counts |
 
 ## 8. Honest limitations — what we would fix next
 
@@ -178,11 +190,12 @@ and well-known problem in the industry. Our method gets **1.58× closer to the t
 answer than the naive approach**, but not to the exact figure. We report the uncertainty
 rather than hiding it.
 
-**Three screens are incomplete:**
+**Two screens are incomplete:**
 - **Admin** has 3 working controls (inject event, break feed, restore feed) and no
   clock control
 - **Data & Sources** was meant to stream arrivals live; it currently refreshes on load
-- **Trust** correctly says "not yet fitted" and therefore shows no chart
+- **Trust** now renders the full backtest; what it cannot show is an *adopted*
+  calibration curve, because the map did not earn adoption
 - **Actions** is empty by design — actions are suppressed below High confidence, and
   nothing reaches High while the calibration is unadopted
 

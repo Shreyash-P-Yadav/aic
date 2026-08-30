@@ -142,6 +142,7 @@ class PersonaNarrator:
             try:
                 response = self._router.complete(
                     call_site="narrate",
+                    insight_id=bundle.insight_id,
                     system=SYSTEM,
                     user=self._prompt(bundle, card, baseline, last),
                     cache_key=f"{self.cache_key(bundle, card.persona)}:attempt{attempt}",

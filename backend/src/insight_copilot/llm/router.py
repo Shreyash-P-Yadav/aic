@@ -15,13 +15,18 @@ Three jobs, and the third is the one that matters on a bill:
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from insight_copilot.config import Settings, get_settings
 from insight_copilot.errors import LLMError
 from insight_copilot.llm.provider import CallSite, LLMProvider, LLMRequest, LLMResponse, ModelTier
 from insight_copilot.logging import get_logger
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle: the meter costs calls the router prices
+    from insight_copilot.telemetry.meter import TelemetryLedger
 
 logger = get_logger(__name__)
 
@@ -65,10 +70,16 @@ class RouterStats:
 class ModelRouter:
     """Chooses the model, serves the cache, and enforces the per-insight cost cap."""
 
-    def __init__(self, provider: LLMProvider, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        settings: Settings | None = None,
+        ledger: TelemetryLedger | None = None,
+    ) -> None:
         self._provider = provider
         self._settings = settings or get_settings()
         self._cache: dict[str, CacheEntry] = {}
+        self._ledger = ledger
         self.stats = RouterStats()
 
     @property
@@ -92,8 +103,16 @@ class ModelRouter:
         cache_key: str | None = None,
         spent_usd: float = 0.0,
         max_tokens: int = 900,
+        insight_id: str | None = None,
     ) -> LLMResponse:
-        """Route one call. Raises ``LLMError`` only when the provider is unusable."""
+        """Route one call. Raises ``LLMError`` only when the provider is unusable.
+
+        ``insight_id`` attributes the call's cost to the insight it was made for. The
+        router is the only place that knows both the tier chosen and the tokens spent,
+        so metering anywhere else would be re-deriving one of them; without it the
+        telemetry screen counted model calls but reported a cost per insight of zero,
+        because the ledger it read was never written to.
+        """
         tier, downgraded = self._tier_for(call_site, spent_usd)
         request = LLMRequest(
             call_site=call_site,
@@ -109,7 +128,11 @@ class ModelRouter:
             cached.hits += 1
             self.stats.cache_hits += 1
             logger.info("router.cache_hit", call_site=call_site, key=key[:8], hits=cached.hits)
-            return LLMResponse(**{**vars(cached.response), "cached": True})
+            hit = LLMResponse(**{**vars(cached.response), "cached": True})
+            # Recorded too: a cache hit costs nothing, and a cost-per-insight that
+            # counted only misses would flatter the number precisely as caching improved.
+            self._meter(insight_id, call_site, hit, tier)
+            return hit
 
         if not self._provider.available:
             raise LLMError(
@@ -130,7 +153,20 @@ class ModelRouter:
             downgraded=downgraded,
             spend_usd=round(self.stats.spend_usd, 5),
         )
+        self._meter(insight_id, call_site, response, tier)
         return response
+
+    def _meter(
+        self, insight_id: str | None, call_site: CallSite, response: LLMResponse, tier: ModelTier
+    ) -> None:
+        """Attribute one call's cost to the insight it was made for.
+
+        Silent when no ledger or no insight id is supplied: metering is observability,
+        and a missing meter must never be able to fail a narration.
+        """
+        if self._ledger is None or not insight_id:
+            return
+        self._ledger.meter(insight_id).record(call_site, response, tier, at=dt.datetime.now(dt.UTC))
 
     def _tier_for(self, call_site: CallSite, spent_usd: float) -> tuple[ModelTier, bool]:
         """The tier this call site wants, downshifted if the cap is close."""

@@ -91,6 +91,7 @@ class HypothesisProposer:
         )
         response = self._router.complete(
             call_site="hypotheses",
+            insight_id=bundle.insight_id,
             system=SYSTEM,
             user=user,
             cache_key=self._router.semantic_key(

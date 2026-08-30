@@ -122,7 +122,7 @@ class AppState:
         self.registry = ContractRegistry.from_directory(self.settings.contracts_dir)
         self.audit: AuditLog = InMemoryAuditLog()
         self.telemetry = TelemetryLedger()
-        self.router = ModelRouter(build_provider(self.settings), self.settings)
+        self.router = ModelRouter(build_provider(self.settings), self.settings, self.telemetry)
         self.narrator = PersonaNarrator(self.router)
         self.classifier = FeedbackClassifier(self.router)
         self.insights: dict[str, InsightRecord] = {}

@@ -367,7 +367,7 @@ export function Telemetry() {
     <div className="space-y-6">
       <SimulatedLabel />
       <Card>
-        <SectionTitle hint="A measurement, not a claim">Model cost</SectionTitle>
+        <SectionTitle hint="Priced from real token counts, at list rates">Model cost</SectionTitle>
         {telemetry.isPending ? <Skeleton rows={2} /> : null}
         {telemetry.data ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -390,6 +390,13 @@ export function Telemetry() {
             />
           </div>
         ) : null}
+        <p className="mt-3 text-xs text-ink-muted">
+          Every model call is metered against the insight it was made for, and priced from the
+          tokens it actually used at published list rates. Running offline the calls are free, so
+          this is what the same work <em>would</em> cost — a modelled figure from real usage, not a
+          bill. Cache hits are counted too: a cost per insight that ignored them would improve on
+          paper exactly as caching made it cheaper.
+        </p>
         <p className="mt-3 text-xs text-ink-muted">
           {telemetry.data?.downgrades ?? 0} call(s) downshifted to a smaller model by the
           per-insight cost cap. A downgrade is always logged, so a cheaper narrative is never

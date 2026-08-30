@@ -221,7 +221,13 @@ out-of-range marketing spend.
 **Say:** "Bad rows are set aside with a reason, never deleted. Every held row is
 countable and explainable."
 
-**Click Telemetry.** Model calls and cache hits, metered per insight.
+**Click Telemetry.** Insights metered, mean cost per insight, model calls, cache hit
+rate — each call attributed to the insight it was made for.
+
+**Click Trust.** The backtest: 25 metrics with targets and verdicts, the reliability
+curve, and the per-tier table. **Four read FAIL.** Say so: "This is the screen where the
+system grades itself, and it is not flattering. That is the point — a report that only
+showed wins would not be a report."
 
 ---
 
@@ -243,9 +249,9 @@ short and it is below.
 | Screen / control | What actually happens | What to say |
 |---|---|---|
 | **Actions** | Empty: "No action at this confidence tier." Correct behaviour — actions are suppressed below High — but there's nothing to show. | "Actions are deliberately suppressed unless confidence is High. Since we refused to adopt the calibration, nothing reaches that bar yet." |
-| **Trust** | Says "Not yet fitted." No curve, no per-tier table. | Say it deliberately — this is your honesty story. See section 3. |
+| **Trust** | Now shows the full backtest: 25 metrics with verdicts, the reliability curve, the per-tier table. Four metrics read FAIL. | **Show this screen.** The FAILs are the honesty story — see section 3 and the wording there. |
 | **Feed → Abstained filter** | Empty *until* you break a feed. After the refusal demo it holds both cards. | Use it during section 3b, not before. |
-| **Telemetry cost** | **$0.00** — the offline mock model is free. | "Cost tracking is wired end to end; it reads zero because we're running with no paid model." |
+| **Telemetry cost** | Now shows a real per-insight figure (about ₹1.08) priced from actual token counts. | "Offline the calls are free, so that's what the same work would cost at list rates — modelled from real usage, not a bill." |
 
 **Two of the four scenarios are now live on screen** — the multi-cause movement
 (section 2) and the refusal (section 3b). The other two are real but quieter: "too small
