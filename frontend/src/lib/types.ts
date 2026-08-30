@@ -32,6 +32,13 @@ export interface InsightSummary {
   delta_pct: number;
   created_at: string;
   headline: string;
+  /** Rupee impact. Null on an abstention — there is no impact to quote for a movement
+   *  the system declined to attribute. */
+  impact_inr: number | null;
+  /** The leading segment, so the card answers "where" without a click. */
+  top_segment: string | null;
+  /** Recent actuals for the card's sparkline; empty when no series was attached. */
+  spark: number[];
 }
 
 export interface NumberFact {
@@ -269,4 +276,15 @@ export interface ProblemDetail {
   status: number;
   detail: string | null;
   reason: string | null;
+}
+
+/** The KPI's own history and the counterfactual it was judged against. */
+export interface KpiSeries {
+  kpi_id: string;
+  unit: string;
+  dates: string[];
+  actual: number[];
+  counterfactual: number[];
+  window_start: string | null;
+  window_end: string | null;
 }

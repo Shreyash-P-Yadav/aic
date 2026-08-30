@@ -11,7 +11,8 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { api, ApiError } from '@/lib/api';
-import { pct, when } from '@/lib/format';
+import { Sparkline } from '@/components/Sparkline';
+import { inr, pct, when } from '@/lib/format';
 import type { InsightSummary } from '@/lib/types';
 import {
   Card,
@@ -101,11 +102,33 @@ function InsightCard({ insight }: { insight: InsightSummary }) {
         <span className="text-sm font-semibold text-ink">{insight.kpi_id}</span>
         <TierChip tier={insight.tier} />
       </div>
-      <p className="mt-2 text-2xl font-semibold text-ink">
-        {abstained ? 'Not attributed' : pct(insight.delta_pct)}
-      </p>
-      <p className="mt-1 text-sm text-ink-secondary">{insight.headline}</p>
-      <p className="mt-3 text-xs text-ink-muted">{when(insight.created_at)}</p>
+      <div className="mt-2 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-2xl font-semibold text-ink">
+            {abstained ? 'Not attributed' : pct(insight.delta_pct)}
+          </p>
+          {insight.impact_inr !== null ? (
+            <p className="tnum mt-0.5 text-sm text-ink-secondary">{inr(insight.impact_inr)}</p>
+          ) : null}
+        </div>
+        {/* Shape only, and only when there is history to show. A sparkline drawn from
+            two points is a straight line that says nothing. */}
+        <div className="w-28 shrink-0">
+          <Sparkline values={insight.spark} muted={abstained} />
+        </div>
+      </div>
+      <p className="mt-2 text-sm text-ink-secondary">{insight.headline}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+        <span>{when(insight.created_at)}</span>
+        {insight.top_segment ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>
+              led by <span className="text-ink-secondary">{insight.top_segment}</span>
+            </span>
+          </>
+        ) : null}
+      </div>
     </Link>
   );
 }

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from insight_copilot.api.schemas import KpiSeriesResponse
 from insight_copilot.api.state import AppState, InsightRecord
 from insight_copilot.contracts.registry import ContractRegistry
 from insight_copilot.demo_ladder import build_rungs
@@ -48,6 +49,10 @@ SCENARIO_WINDOW = (dt.date(2026, 3, 9), dt.date(2026, 3, 15))
 
 DETECTION_WINDOW = (dt.date(2026, 3, 6), dt.date(2026, 3, 20))
 """The window held out of the baseline fit, so it never learns the event."""
+
+CHART_DAYS = 180
+"""Days of history the insight chart shows. Six months carries the annual seasonal
+shape the baseline is modelling without drawing 939 points into a smear."""
 
 CALIBRATION_EXCLUSIONS: tuple[tuple[dt.date, dt.date], ...] = (
     (dt.date(2023, 11, 1), dt.date(2023, 11, 25)),
@@ -149,6 +154,7 @@ def run_demo(state: AppState, world: object, warehouse: object) -> DemoResult:
         created_at=dt.datetime.now(dt.UTC),
         bundle=result if isinstance(result, InsightEvidenceBundle) else None,
         abstention=result if isinstance(result, AbstentionArtifact) else None,
+        series=_series_response(contract.kpi.id, contract.definition.unit, series, expected),
     )
     state.store(record)
     logger.info("demo.insight", insight_id=record.insight_id, tier=record.tier)
@@ -158,6 +164,28 @@ def run_demo(state: AppState, world: object, warehouse: object) -> DemoResult:
             f"{record.kpi_id} {detection.delta_pct:+.2f}% on {detection.day} "
             f"at p = {detection.p_value:.4f}; tier {record.tier}"
         ),
+    )
+
+
+def _series_response(
+    kpi_id: str, unit: str, series: Series, expected: np.ndarray
+) -> KpiSeriesResponse:
+    """The last :data:`CHART_DAYS` of actual and counterfactual, for the chart.
+
+    Trimmed rather than sent whole: three years of daily points is 939 values per
+    series, which draws a smear at any width a browser will give it. The window shown
+    is wide enough to carry the seasonal shape the baseline is modelling and the
+    movement being reported.
+    """
+    dates = series.dates[-CHART_DAYS:]
+    return KpiSeriesResponse(
+        kpi_id=kpi_id,
+        unit=unit,
+        dates=[str(day.astype("datetime64[D]")) for day in dates],
+        actual=[float(value) for value in series.values[-CHART_DAYS:]],
+        counterfactual=[float(value) for value in expected[-CHART_DAYS:]],
+        window_start=DETECTION_WINDOW[0].isoformat(),
+        window_end=DETECTION_WINDOW[1].isoformat(),
     )
 
 

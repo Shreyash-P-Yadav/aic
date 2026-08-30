@@ -14,8 +14,23 @@ import { api, ApiError } from '@/lib/api';
 import { day, inr } from '@/lib/format';
 import { isAbstention, type ActionFact, type AskResponse } from '@/lib/types';
 
+/**
+ * Questions that demonstrate both paths.
+ *
+ * The first three resolve to a governed KPI and answer from a computation that already
+ * happened. The last deliberately names none, so the system asks which KPI is meant
+ * rather than guessing — which is the behaviour worth showing, and which nobody
+ * discovers on a screen with a single empty box.
+ */
+const EXAMPLES = [
+  'Why did net_revenue move last week?',
+  'What happened to order_fill_rate?',
+  'Explain the change in unit_volume',
+  'What happened?',
+];
+
 export function Ask() {
-  const [question, setQuestion] = useState('Why did net_revenue move last week?');
+  const [question, setQuestion] = useState(EXAMPLES[0] ?? '');
   const [answer, setAnswer] = useState<AskResponse | null>(null);
   const ask = useMutation({
     mutationFn: (text: string) => api.ask(text),
@@ -50,6 +65,22 @@ export function Ask() {
             Ask
           </button>
         </form>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-ink-muted">Try:</span>
+          {EXAMPLES.map((example) => (
+            <button
+              key={example}
+              type="button"
+              onClick={() => {
+                setQuestion(example);
+                ask.mutate(example);
+              }}
+              className="rounded-full border border-hairline-border px-3 py-1 text-xs text-ink-secondary transition hover:border-hairline-axis"
+            >
+              {example}
+            </button>
+          ))}
+        </div>
         {ask.isPending ? <Skeleton rows={2} /> : null}
         {ask.isError ? (
           <ErrorState

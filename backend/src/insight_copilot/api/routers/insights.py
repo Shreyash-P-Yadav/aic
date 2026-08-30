@@ -14,6 +14,7 @@ from insight_copilot.api.schemas import (
     FeedbackRequest,
     FeedbackResponse,
     InsightSummary,
+    KpiSeriesResponse,
     NarrativeResponse,
 )
 from insight_copilot.api.state import AppState, InsightRecord
@@ -40,6 +41,22 @@ async def get_insight(
     """The whole object — every number the UI may render is inside it."""
     record = _find(state, insight_id)
     return record.bundle or record.abstention  # type: ignore[return-value]  # one is set
+
+
+@router.get("/api/insights/{insight_id}/series", response_model=KpiSeriesResponse)
+async def get_series(insight_id: str, state: AppState = Depends(get_state)) -> KpiSeriesResponse:
+    """The KPI's history and the counterfactual it was judged against.
+
+    A 404 rather than an empty series when none was attached: a chart of nothing is
+    indistinguishable from a chart of a flat KPI, and the UI should say which it is.
+    """
+    record = _find(state, insight_id)
+    if record.series is None:
+        raise ResourceNotFound(
+            "no series was attached to this insight",
+            detail=f"{insight_id} was produced without one",
+        )
+    return record.series
 
 
 @router.get("/api/insights/{insight_id}/narrative", response_model=NarrativeResponse)
@@ -148,4 +165,7 @@ def _summary(record: InsightRecord) -> InsightSummary:
         delta_pct=record.delta_pct,
         created_at=record.created_at.isoformat(),
         headline=headline,
+        impact_inr=record.impact_inr,
+        top_segment=record.top_segment,
+        spark=record.spark(),
     )

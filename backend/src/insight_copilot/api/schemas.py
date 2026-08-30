@@ -71,6 +71,39 @@ class InsightSummary(BaseModel):
     delta_pct: float
     created_at: str
     headline: str
+    impact_inr: float | None = None
+    """The rupee impact. Spec-mandated on the card and previously missing, which left
+    a reader with a percentage and no sense of what it was worth."""
+    top_segment: str | None = None
+    """The leading segment, so the card answers "where" without a click."""
+    spark: list[float] = Field(default_factory=list)
+    """A short recent history for the card's sparkline. Sent with the list rather than
+    fetched per card, because one request that answers the screen beats N that each
+    answer a tile."""
+
+
+class KpiSeriesResponse(BaseModel):
+    """The KPI's own history, with the counterfactual it was judged against.
+
+    The product's whole claim is "this moved, against what we expected" — and until
+    now the UI showed the two scalars and never the two lines. One axis, two series in
+    the same unit, so no dual-axis rule is in play; the detection window is returned
+    separately so the chart can shade the period that was held out of the fit rather
+    than leaving a reader to infer it.
+    """
+
+    kpi_id: str
+    unit: str
+    dates: list[str]
+    actual: list[float]
+    counterfactual: list[float]
+    window_start: str | None = None
+    window_end: str | None = None
+
+    @property
+    def points(self) -> int:
+        """How many days the series covers."""
+        return len(self.dates)
 
 
 class NarrativeResponse(BaseModel):

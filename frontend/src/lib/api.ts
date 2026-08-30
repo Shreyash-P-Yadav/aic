@@ -15,6 +15,7 @@ import type {
   FreshnessResponse,
   InsightPayload,
   InsightSummary,
+  KpiSeries,
   NarrativeResponse,
   ProblemDetail,
   RoleSummary,
@@ -84,6 +85,8 @@ export const api = {
     request<NarrativeResponse>(`/api/insights/${id}/narrative?persona=${persona}`, { signal }),
   evidence: (id: string, signal?: AbortSignal) =>
     request<EvidenceDrawer>(`/api/insights/${id}/evidence`, { signal }),
+  series: (id: string, signal?: AbortSignal) =>
+    request<KpiSeries>(`/api/insights/${id}/series`, { signal }),
   feedback: (id: string, text: string) =>
     request<{ label: string; reason: string }>(`/api/insights/${id}/feedback`, {
       method: 'POST',

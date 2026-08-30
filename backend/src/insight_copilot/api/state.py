@@ -13,6 +13,7 @@ import datetime as dt
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from insight_copilot.api.schemas import KpiSeriesResponse
 from insight_copilot.config import Settings, get_settings
 from insight_copilot.contracts.registry import ContractRegistry
 from insight_copilot.engine.bundle import AbstentionArtifact, InsightEvidenceBundle
@@ -27,6 +28,10 @@ from insight_copilot.security.identity import ROLES, Identity, RoleName, Session
 from insight_copilot.telemetry.meter import TelemetryLedger
 
 logger = get_logger(__name__)
+
+SPARK_POINTS = 60
+"""Days of history behind each card's sparkline. Two months is enough to read a
+seasonal shape and short enough that the movement being reported is still visible."""
 
 DEFAULT_ROLE: RoleName = "analyst"
 """The role a session starts in. An analyst sees method detail, which is the most
@@ -52,6 +57,13 @@ class InsightRecord:
     abstention: AbstentionArtifact | None = None
     narratives: dict[str, str] = field(default_factory=dict)
     feedback: list[ClassifiedFeedback] = field(default_factory=list)
+    series: KpiSeriesResponse | None = None
+    """The KPI's history and counterfactual, attached by whatever produced the insight.
+
+    Held on the record rather than inside the evidence bundle on purpose: the bundle is
+    the audited contract of what was computed and narrated, and a 939-point chart series
+    is a presentation concern that would bloat every serialisation of it.
+    """
 
     @property
     def status(self) -> str:
@@ -68,6 +80,30 @@ class InsightRecord:
     def delta_pct(self) -> float:
         """The movement, for the list view."""
         return self.bundle.delta_pct if self.bundle else 0.0
+
+    @property
+    def impact_inr(self) -> float | None:
+        """The rupee impact, for the card. ``None`` on an abstention: there is no
+        impact to quote for a movement the system declined to attribute."""
+        return self.bundle.delta if self.bundle else None
+
+    @property
+    def top_segment(self) -> str | None:
+        """The leading segment's label, or ``None`` when nothing was named."""
+        if self.bundle is None or not self.bundle.segments:
+            return None
+        return self.bundle.segments[0].label
+
+    def spark(self, points: int = SPARK_POINTS) -> list[float]:
+        """The tail of the actual series, for the card's sparkline.
+
+        Deliberately the raw values, not an index: the sparkline carries shape only —
+        it has no axis and no labels — so rescaling it would imply a precision the mark
+        is not making.
+        """
+        if self.series is None:
+            return []
+        return list(self.series.actual[-points:])
 
 
 class AppState:

@@ -10,6 +10,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { AttributionLadder, ConfidenceRail } from '@/components/AttributionLadder';
+import { KpiChart } from '@/components/KpiChart';
 import { ConfidencePanel } from '@/components/ConfidencePanel';
 import {
   Card,
@@ -84,6 +85,7 @@ export function InsightDetail() {
         ) : (
           <>
             <Headline bundle={payload} />
+            <SeriesPanel insightId={insightId} />
             <section>
               <SectionTitle hint="Each rung is a smaller, true answer">
                 Attribution ladder
@@ -163,5 +165,39 @@ function Detail({ title, items }: { title: string; items: string[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * The KPI's history, fetched separately from the bundle.
+ *
+ * Separate because it is a presentation concern rather than part of the audited
+ * evidence, and because an insight produced without one is a normal state — a scan
+ * that ran before the series was attached still has a valid bundle, and this panel
+ * simply does not appear rather than putting an error on a screen that is otherwise
+ * correct.
+ */
+function SeriesPanel({ insightId }: { insightId: string }) {
+  const series = useQuery({
+    queryKey: ['series', insightId],
+    queryFn: ({ signal }) => api.series(insightId, signal),
+    retry: false,
+  });
+  if (series.isPending) {
+    return (
+      <Card>
+        <SectionTitle>Against the counterfactual</SectionTitle>
+        <Skeleton rows={4} />
+      </Card>
+    );
+  }
+  if (series.isError || !series.data) return null;
+  return (
+    <Card>
+      <SectionTitle hint="One axis, one unit — never two scales a reader can pick between">
+        Against the counterfactual
+      </SectionTitle>
+      <KpiChart series={series.data} />
+    </Card>
   );
 }
