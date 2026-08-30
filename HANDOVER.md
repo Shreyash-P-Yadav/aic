@@ -66,12 +66,19 @@ files. `ruff`, `eslint`, `prettier`, `tsc` clean.
 The eval report is `artifacts/eval_report.md`. It leads with what failed.
 
 **One caveat on `verify-all`, stated plainly:** it was run in order against a live
-`make demo`, and it went green from P0 to P12. It was **not** run from
-`git clean -xfd && make install && make generate`, because a full regeneration plus the
-counterfactual ledger is roughly a fifteen-minute rebuild of state that was already
-correct. Every individual gate was run for real and its output is in `BUILD_LOG.md`;
-what has not been demonstrated end to end is the very first `make install` on a machine
-with no `.venv`.
+`make demo`, and it went green from P0 to P12. It was **not** run in the same pass as a
+full `make generate` + `make generate-truth`, because regenerating the counterfactual
+ledger is a ~6-minute rebuild of state that was already correct. Every individual gate
+was run for real and its output is in `BUILD_LOG.md`.
+
+**A clean clone was verified separately**, and it works: `git clone` of this branch into
+an empty directory, then `make install` (exit 0, npm deprecation warnings only), then
+`make demo` — **6m 23s** to serving, producing byte-for-byte the same result as the
+working copy (1,623 batches, 80,954 rows, `net_revenue -41.46%` at p = 0.0026, tier
+Moderate). That doubles as a determinism check across directories.
+
+**Disk:** budget **2 GB**. Measured on that clean clone — `.venv` 859 MB, `data/` after
+`make demo` 418 MB, `frontend/node_modules` 235 MB, plus ~250 MB for the truth ledger.
 
 ## What failed, with the measured numbers
 
