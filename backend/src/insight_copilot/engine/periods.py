@@ -96,6 +96,26 @@ def _seasonal_profile(values: np.ndarray, period: int) -> np.ndarray:
     return centred
 
 
+def _bridge_gaps(values: np.ndarray) -> np.ndarray:
+    """Linear interpolation across interior gaps; leading/trailing gaps are left NaN.
+
+    Only the interior is bridged because extrapolating past the ends invents data at
+    exactly the places a reader would check first. A series that is still non-finite
+    after this is one the caller declines to analyse rather than one it guesses at.
+    """
+    finite = np.isfinite(values)
+    if finite.all() or not finite.any():
+        return values
+    index = np.arange(values.size, dtype=np.float64)
+    bridged = values.copy()
+    interior = np.zeros_like(finite)
+    first, last = int(np.argmax(finite)), int(values.size - np.argmax(finite[::-1]) - 1)
+    interior[first : last + 1] = True
+    fill = interior & ~finite
+    bridged[fill] = np.interp(index[fill], index[finite], values[finite])
+    return bridged
+
+
 def discover(series: Series, *, detrend: bool = True) -> list[PeriodEvidence]:
     """Candidate periods, strongest first, each with its ACF verdict.
 
@@ -107,8 +127,17 @@ def discover(series: Series, *, detrend: bool = True) -> list[PeriodEvidence]:
     interpretable and a residual with the real signal removed.
     """
     values = series.values.astype(np.float64)
+    # A ratio KPI has no meaningful zero-fill, so its series carries NaN on days it was
+    # not observed — and a periodogram of NaN is NaN everywhere. Interpolating across
+    # the gaps is right here and only here: this function is looking for the *length*
+    # of a repeating cycle, which a short bridged gap does not move, and every routine
+    # that estimates a magnitude still sees the unfilled series. Dropping the gaps
+    # instead would silently shorten the axis and change the period being measured.
+    values = _bridge_gaps(values)
     n = values.size
     if n < 3 * MIN_PERIOD:
+        return []
+    if not np.isfinite(values).all():
         return []
     if detrend:
         values = signal.detrend(values, type="linear")

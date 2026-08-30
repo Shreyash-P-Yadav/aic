@@ -65,13 +65,24 @@ def load_personas(directory: Path | None = None) -> dict[str, PersonaCard]:
     return cards
 
 
-def format_amount(value: float, style: NumberFormat) -> str:
-    """Render a rupee amount the way the persona reads them.
+MONETARY_UNIT = "INR"
+"""The only unit crore and lakh may be applied to. Everything else renders plainly."""
+
+
+def format_amount(value: float, style: NumberFormat, unit: str = MONETARY_UNIT) -> str:
+    """Render a quantity the way the persona reads it — **in its own unit**.
 
     A CFO reads crore, a regional manager reads lakh, an analyst reads the number. The
     *value* is identical in all three, which is what lets the verifier match any of them
     against the same fact.
+
+    ``unit`` is not decoration. Applied blindly, the persona styles turned a count of
+    units into "Rs 1.40 crore" — wrong on screen, and correctly rejected by the number
+    verifier, which is how this was found. A non-monetary KPI is rendered plainly with
+    its unit named, because there is no lakh of a fill rate.
     """
+    if unit != MONETARY_UNIT:
+        return f"{value:,.0f} {unit}" if unit else f"{value:,.0f}"
     if style == "crore":
         return f"Rs {value / CRORE:,.2f} crore"
     if style == "lakh":
@@ -149,10 +160,12 @@ class TemplateNarrator:
     def _headline(self, bundle: InsightEvidenceBundle, card: PersonaCard) -> str:
         """The first sentence. Every number in it is a bundle fact."""
         direction = "fell" if bundle.delta < 0 else "rose"
+        delta = bundle.fact("delta")
+        unit = delta.unit if delta else MONETARY_UNIT
         return (
             f"{bundle.kpi_id} {direction} {abs(bundle.delta_pct):.2f}% against its "
             f"counterfactual, a gap of "
-            f"{format_amount(abs(bundle.delta), card.number_format)}."
+            f"{format_amount(abs(bundle.delta), card.number_format, unit)}."
         )
 
     @staticmethod

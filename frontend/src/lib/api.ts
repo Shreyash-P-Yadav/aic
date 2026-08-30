@@ -101,7 +101,7 @@ export const api = {
   calibration: (signal?: AbortSignal) =>
     request<CalibrationResponse>('/api/calibration', { signal }),
   audit: (signal?: AbortSignal) => request<AuditEntry[]>('/api/audit', { signal }),
-  demo: (control: 'inject-event' | 'break-feed', target: string) =>
+  demo: (control: 'inject-event' | 'break-feed' | 'restore-feed', target: string) =>
     request<{ control: string; detail: string; sim_time: string }>(`/api/demo/${control}`, {
       method: 'POST',
       body: JSON.stringify({ target }),

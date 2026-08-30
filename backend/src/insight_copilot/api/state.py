@@ -127,6 +127,7 @@ class AppState:
             intent="api",
         )
         self._warehouse: object | None = None
+        self._world: object | None = None
         self._harness: object | None = None
         self._controls: object | None = None
 
@@ -150,12 +151,31 @@ class AppState:
 
     # -------------------------------------------------------------- warehouse --
     def attach_warehouse(
-        self, warehouse: object, harness: object | None = None, controls: object | None = None
+        self,
+        warehouse: object,
+        harness: object | None = None,
+        controls: object | None = None,
+        world: object | None = None,
     ) -> None:
         """Give the state a loaded warehouse. Called by the demo and the CLI."""
         self._warehouse = warehouse
         self._harness = harness
         self._controls = controls
+        self._world = world
+
+    @property
+    def world(self) -> object:
+        """The generated world, needed to re-run a scan after a demo control.
+
+        Held here rather than passed through every call because a control arrives as an
+        HTTP request with no access to whatever the CLI happened to build at startup.
+        """
+        if self._world is None:
+            raise ServiceUnavailable(
+                "no world is attached",
+                detail="start the API with `insight-copilot demo` so controls can re-scan",
+            )
+        return self._world
 
     @property
     def warehouse(self) -> object:

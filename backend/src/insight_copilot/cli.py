@@ -256,7 +256,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             f"{summary.rows_landed:,} rows"
         )
         state = AppState(cfg)
-        state.attach_warehouse(bundle.warehouse, bundle.harness, bundle.controls)
+        state.attach_warehouse(bundle.warehouse, bundle.harness, bundle.controls, bundle.world)
         result = run_demo(state, bundle.world, bundle.warehouse)
         print(f"OK    scenario run: {result.detail or 'no detection survived'}")
         print(f"OK    narrative cache pre-warmed: {prewarm(state).detail}")

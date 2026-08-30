@@ -214,8 +214,15 @@ const CONTROLS = [
     id: 'break-feed' as const,
     title: 'Break a feed',
     consequence:
-      'Pauses a source. Freshness walks green to amber to red on that contract’s own SLA schedule, c4 decays, and the engine moves from publishing to hedging to abstaining.',
-    placeholder: 'martech_weekly',
+      'Pauses a source and runs the simulated clock forward until it has actually gone stale. Freshness walks to red on that contract’s own schedule while every other feed keeps delivering, the c4 signal collapses, and the engine re-runs and abstains rather than explaining revenue from the feeds that are left.',
+    placeholder: 'oms_orders',
+  },
+  {
+    id: 'restore-feed' as const,
+    title: 'Restore a feed',
+    consequence:
+      'Lets a paused source deliver again and runs the clock until its next drop lands. Freshness returns to green and the engine re-runs and publishes — so the abstention demo can be shown twice.',
+    placeholder: 'oms_orders',
   },
 ];
 

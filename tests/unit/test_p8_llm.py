@@ -353,3 +353,14 @@ def test_rounding_never_admits_a_fabricated_number() -> None:
     fact = NumberFact(key="explained", value=0.62, unit="fraction", method="regression")
     assert not fact.matches(0.70, decimals=2), "0.62 does not round to 0.70 at any precision"
     assert not fact.matches(0.70)
+
+
+def test_a_non_monetary_kpi_is_never_rendered_as_rupees() -> None:
+    """`unit_volume` is a count. Rendering it as "Rs 1.40 crore" is wrong on screen and
+    was correctly rejected by the number verifier — which is how it was found: three of
+    four personas failed verification on every unit_volume insight, because the persona
+    styles were applied without reference to the KPI's own unit.
+    """
+    assert format_amount(14_000_000, "crore", "INR") == "Rs 1.40 crore"
+    assert format_amount(14_000_000, "crore", "units") == "14,000,000 units"
+    assert format_amount(96.4, "lakh", "percent") == "96 percent"

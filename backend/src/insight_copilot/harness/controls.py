@@ -25,6 +25,7 @@ state a rehearsal starts from.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from insight_copilot.datagen.events.ledger import EventLedger
@@ -57,6 +58,14 @@ class ControlOutcome:
     sim_time: dt.datetime
     results: tuple[IngestResult, ...] = ()
     freshness: tuple[FreshnessStatus, ...] = ()
+
+
+BREAK_FEED_MAX_DAYS = 12
+"""Cap on how far the break-feed control will run the clock forward looking for red.
+
+Twelve days clears the slowest cadence in the contract set (weekly, plus its SLA) with
+room to spare. It is a cap rather than a target: the loop stops the moment the state
+changes, so a daily feed goes red in a day and only a weekly one uses the headroom."""
 
 
 class DemoControls:
@@ -105,23 +114,79 @@ class DemoControls:
 
     # ----------------------------------------------------------- 2. break feed --
     def break_feed(self, source_id: str) -> ControlOutcome:
-        """Pause a feed. Nothing from it lands until :meth:`restore_feed`."""
+        """Pause a feed and run the clock forward until it has visibly gone stale.
+
+        Pausing alone changed nothing a viewer could see. Freshness is measured against
+        whether a *scheduled* drop arrived, so a feed paused for zero simulated seconds
+        is still perfectly fresh — the control reported success and the tile stayed
+        green, which is the worst possible combination on stage.
+
+        Advancing by a fixed number of hours does not fix it either, and the reason is
+        instructive: a weekly feed's next drop can be six days away, so twenty hours
+        past its *latency* SLA is still comfortably before anything is due. Measured on
+        ``martech_weekly``: paused, advanced 20h, still green.
+
+        So the control advances a day at a time and **stops when the state actually
+        changes**, which is correct for any cadence without needing to know it. Every
+        other feed keeps delivering through that window, which is the point — one
+        source goes amber then red while the rest stay green, so the confidence score
+        moves for a reason that is visible rather than asserted.
+        """
         self._harness.pause(source_id)
+        landed = 0
+        days = 0
+        for _ in range(BREAK_FEED_MAX_DAYS):
+            if self._state_of(source_id) == "red":
+                break
+            landed += self._harness.advance_days(1).landed
+            days += 1
+        statuses = self._harness.freshness()
+        state = self._state_of(source_id, statuses)
+        green = sum(1 for item in statuses if item.state == "green")
+        logger.info("controls.feed_broken", source_id=source_id, state=state, days=days)
         return ControlOutcome(
             control="break_feed",
-            detail=f"{source_id} paused; its next scheduled drop will not arrive",
+            detail=(
+                f"{source_id} paused; {days} simulated day(s) later it is {state} "
+                f"while {green} of {len(statuses)} feeds stay green "
+                f"({landed} batches landed from the others)."
+            ),
             sim_time=self._harness.clock.now,
-            freshness=tuple(self._harness.freshness()),
+            freshness=tuple(statuses),
         )
 
+    def _state_of(self, source_id: str, statuses: Sequence[FreshnessStatus] | None = None) -> str:
+        """One source's freshness state, or ``unknown`` if the harness does not know it."""
+        rows = statuses if statuses is not None else self._harness.freshness()
+        return next((item.state for item in rows if item.source_id == source_id), "unknown")
+
     def restore_feed(self, source_id: str) -> ControlOutcome:
-        """Let a paused feed deliver again from the next scheduled drop."""
+        """Let a paused feed deliver again, and run the clock until it does.
+
+        Symmetric with :meth:`break_feed`, and for the same reason: resuming a feed
+        without letting its next drop actually land leaves the tile red and the insight
+        abstained, so a presenter who wanted to show recovery would appear to have
+        broken the demo permanently.
+        """
         self._harness.resume(source_id)
+        landed = 0
+        days = 0
+        for _ in range(BREAK_FEED_MAX_DAYS):
+            if self._state_of(source_id) == "green":
+                break
+            landed += self._harness.advance_days(1).landed
+            days += 1
+        statuses = self._harness.freshness()
+        state = self._state_of(source_id, statuses)
+        logger.info("controls.feed_restored", source_id=source_id, state=state, days=days)
         return ControlOutcome(
             control="restore_feed",
-            detail=f"{source_id} resumed",
+            detail=(
+                f"{source_id} resumed; {days} simulated day(s) later it is {state} "
+                f"again ({landed} batches landed)."
+            ),
             sim_time=self._harness.clock.now,
-            freshness=tuple(self._harness.freshness()),
+            freshness=tuple(statuses),
         )
 
     # ---------------------------------------------------------- 3. restatement --

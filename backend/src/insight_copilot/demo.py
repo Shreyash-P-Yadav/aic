@@ -21,21 +21,9 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
-import numpy as np
-
-from insight_copilot.api.schemas import KpiSeriesResponse
-from insight_copilot.api.state import AppState, InsightRecord
-from insight_copilot.contracts.registry import ContractRegistry
-from insight_copilot.demo_ladder import build_rungs
-from insight_copilot.engine.attribute_where import Attributor, WhereResult
-from insight_copilot.engine.bundle import AbstentionArtifact, InsightEvidenceBundle
-from insight_copilot.engine.cube import CubeWindow, national_factor, segment_actual_forecast
+from insight_copilot.api.state import AppState
+from insight_copilot.demo_scan import ScanSpec, scan
 from insight_copilot.engine.dataset import EngineDataset
-from insight_copilot.engine.detect import ConformalDetector, apply_fdr
-from insight_copilot.engine.evidence import EvidenceRetriever
-from insight_copilot.engine.pipeline import InsightEngine, RunInputs
-from insight_copilot.engine.regression_baseline import RegressionBaseline, calendar_events
-from insight_copilot.engine.series import Series
 from insight_copilot.errors import ServiceUnavailable
 from insight_copilot.ingest.models import FreshnessStatus
 from insight_copilot.logging import get_logger
@@ -74,118 +62,109 @@ class DemoResult:
     detail: str
 
 
-def run_demo(state: AppState, world: object, warehouse: object) -> DemoResult:
-    """Detect, attribute, retrieve, score and store the flagship scenario."""
-    registry: ContractRegistry = state.registry
-    dataset = EngineDataset(
-        warehouse=warehouse,  # type: ignore[arg-type]  # Warehouse, attached by the caller
-        registry=registry,
-        compiler=ContractSQLCompiler(registry, state.audit),
-        executor=QueryExecutor(warehouse.connection, state.audit),  # type: ignore[attr-defined]
-    )
-    contract = registry.kpi("net_revenue")
-    series = dataset.kpi_series("net_revenue", state.session)
-    calendar = warehouse.query(  # type: ignore[attr-defined]
-        "SELECT date, is_holiday FROM gold.dim_calendar ORDER BY date"
-    )
-    panel = dataset.national_panel(state.session)
-
-    baseline = RegressionBaseline(
-        events=calendar_events(calendar),
-        controls=panel[["date", "rainfall_mm", "temp_max_c", "discount_depth_pct"]],
-    )
-    held_out = series.mask_between(*DETECTION_WINDOW)
-    baseline.fit(series.exclude(held_out))
-    expected = baseline.counterfactual(series)
-
-    calibration = ~held_out
-    for start, end in CALIBRATION_EXCLUSIONS:
-        calibration &= ~series.mask_between(start, end)
-    detections = apply_fdr(
-        ConformalDetector(alpha=0.01).scan(
-            kpi_id="net_revenue",
-            segment="national",
-            series=series,
-            expected=expected,
-            calibration_mask=calibration,
-            test_mask=held_out,
-        ),
-        contract.materiality.statistical.fdr_q,
-    )
-    survivors = [item for item in detections if item.passed_fdr]
-    if not survivors:
-        return DemoResult(insights=[], detail="no detection survived the FDR correction")
-
-    detection = min(survivors, key=lambda item: item.day)
-    where = _attribute(dataset, state, series, expected)
-    evidence = EvidenceRetriever(getattr(world, "documents", [])).retrieve(
-        "warehouse capacity outage north region fulfilment shortfall",
-        effect_day=detection.day,
+SCAN_SPECS: tuple[ScanSpec, ...] = (
+    ScanSpec(
+        kpi_id="net_revenue",
+        cube_measure="net_revenue_inr",
+        window=SCENARIO_WINDOW,
+        detection_window=DETECTION_WINDOW,
+        evidence_query="warehouse capacity outage north region fulfilment shortfall",
         entities=["North", "DC-North"],
-        floor=contract.confidence_policy.evidence_floor,
-    )
+        lever_change=-0.08,
+        ladder=True,
+    ),
+    ScanSpec(
+        kpi_id="unit_volume",
+        cube_measure="units",
+        window=SCENARIO_WINDOW,
+        detection_window=DETECTION_WINDOW,
+        evidence_query="pick capacity shortfall units shipped north warehouse",
+        entities=["North", "DC-North"],
+    ),
+    ScanSpec(
+        kpi_id="gross_margin_pct",
+        cube_measure="",
+        window=SCENARIO_WINDOW,
+        detection_window=DETECTION_WINDOW,
+        evidence_query="margin pressure discount pricing cost of goods",
+    ),
+)
+"""Every KPI the demo scans, in the order the feed prioritises them.
+
+Three rather than one, because a feed that ranks by impact with a single card on it is
+not demonstrating ranking. ``gross_margin_pct`` carries no cube measure on purpose: it
+is a ratio, and Adtributor's explanatory power is defined over an additive measure, so
+attributing it would be arithmetic that looks right and means nothing. The scan reports
+that it skipped attribution rather than silently naming no segment."""
+
+
+def run_demo(state: AppState, world: object, warehouse: object) -> DemoResult:
+    """Scan every configured KPI, store what each produced, and report the flagship."""
+    dataset = _dataset(state, warehouse)
+    documents = list(getattr(world, "documents", []))
     freshness = _freshness(state)
-    rungs = build_rungs(warehouse, contract, SCENARIO_WINDOW)  # type: ignore[arg-type]
+    stored: list[str] = []
+    details: list[str] = []
 
-    result = InsightEngine().run(
-        RunInputs(
-            contract=contract,
-            detection=detection,
-            where=where,
-            why=rungs.why,
-            evidence=evidence,
+    for spec in SCAN_SPECS:
+        outcome = scan(
+            spec,
+            dataset=dataset,
+            state=state,
+            warehouse=warehouse,
+            documents=documents,
             freshness=freshness,
-            history_days=len(series),
-            period=SCENARIO_WINDOW,
-            price_effect=rungs.price_effect,
-            volume_effect=rungs.volume_effect,
-            mix_effect=rungs.mix_effect,
-            pvm_reference=rungs.reference_revenue,
-            pvm_comparison=rungs.comparison_revenue,
-            pvm_label=rungs.label,
-            baseline_value=float(expected[held_out].sum()),
-            lever_change=-0.08,
-        ),
-        now=dt.datetime.now(dt.UTC),
+            calibration_exclusions=CALIBRATION_EXCLUSIONS,
+        )
+        details.append(outcome.detail)
+        if outcome.record is None:
+            logger.info("demo.scan_empty", detail=outcome.detail)
+            continue
+        state.store(outcome.record)
+        stored.append(outcome.record.insight_id)
+        logger.info(
+            "demo.insight",
+            insight_id=outcome.record.insight_id,
+            kpi_id=outcome.record.kpi_id,
+            tier=outcome.record.tier,
+        )
+
+    flagship = next(
+        (state.insights[item] for item in stored if state.insights[item].kpi_id == "net_revenue"),
+        None,
     )
-    record = InsightRecord(
-        insight_id=result.insight_id,
-        kpi_id=result.kpi_id,
-        created_at=dt.datetime.now(dt.UTC),
-        bundle=result if isinstance(result, InsightEvidenceBundle) else None,
-        abstention=result if isinstance(result, AbstentionArtifact) else None,
-        series=_series_response(contract.kpi.id, contract.definition.unit, series, expected),
-    )
-    state.store(record)
-    logger.info("demo.insight", insight_id=record.insight_id, tier=record.tier)
+    if flagship is None or flagship.bundle is None:
+        return DemoResult(insights=stored, detail="; ".join(details))
+    bundle = flagship.bundle
     return DemoResult(
-        insights=[record.insight_id],
+        insights=stored,
         detail=(
-            f"{record.kpi_id} {detection.delta_pct:+.2f}% on {detection.day} "
-            f"at p = {detection.p_value:.4f}; tier {record.tier}"
+            f"{bundle.kpi_id} {bundle.delta_pct:+.2f}% on {bundle.period_start} "
+            f"at p = {bundle.p_value:.4f}; tier {flagship.tier} "
+            f"({len(stored)} of {len(SCAN_SPECS)} KPIs produced an insight)"
         ),
     )
 
 
-def _series_response(
-    kpi_id: str, unit: str, series: Series, expected: np.ndarray
-) -> KpiSeriesResponse:
-    """The last :data:`CHART_DAYS` of actual and counterfactual, for the chart.
+def rescan(state: AppState, world: object, warehouse: object) -> DemoResult:
+    """Re-run every scan against the world as it is NOW, replacing the stored insights.
 
-    Trimmed rather than sent whole: three years of daily points is 939 values per
-    series, which draws a smear at any width a browser will give it. The window shown
-    is wide enough to carry the seasonal shape the baseline is modelling and the
-    movement being reported.
+    This is what makes a demo control mean something. Breaking a feed changes freshness,
+    freshness moves the ``c4`` signal, and ``c4`` can force an abstention — but none of
+    that reaches a viewer unless the engine runs again afterwards against the changed
+    world. Previously the controls altered state that nothing re-read.
     """
-    dates = series.dates[-CHART_DAYS:]
-    return KpiSeriesResponse(
-        kpi_id=kpi_id,
-        unit=unit,
-        dates=[str(day.astype("datetime64[D]")) for day in dates],
-        actual=[float(value) for value in series.values[-CHART_DAYS:]],
-        counterfactual=[float(value) for value in expected[-CHART_DAYS:]],
-        window_start=DETECTION_WINDOW[0].isoformat(),
-        window_end=DETECTION_WINDOW[1].isoformat(),
+    state.insights.clear()
+    return run_demo(state, world, warehouse)
+
+
+def _dataset(state: AppState, warehouse: object) -> EngineDataset:
+    """Compiler-mediated access for the scans. Entitlements apply here as everywhere."""
+    return EngineDataset(
+        warehouse=warehouse,  # type: ignore[arg-type]  # Warehouse, attached by the caller
+        registry=state.registry,
+        compiler=ContractSQLCompiler(state.registry, state.audit),
+        executor=QueryExecutor(warehouse.connection, state.audit),  # type: ignore[attr-defined]
     )
 
 
@@ -197,30 +176,3 @@ def _freshness(state: AppState) -> list[FreshnessStatus]:
         return []
     statuses: list[FreshnessStatus] = harness.freshness()  # type: ignore[attr-defined]
     return statuses
-
-
-def _attribute(
-    dataset: EngineDataset, state: AppState, series: Series, expected: np.ndarray
-) -> WhereResult:
-    """Rung 1 over the scenario week."""
-
-    week = series.mask_between(*SCENARIO_WINDOW)
-    window = CubeWindow.ending_before(*SCENARIO_WINDOW)
-    cube = dataset.cube(state.session, start=window.baseline_start, end=window.test_end)
-    baseline_mask = series.mask_between(window.baseline_start, window.baseline_end)
-    factor = national_factor(
-        float(expected[week].sum()), float(series.values[baseline_mask].sum()), window
-    )
-    frame = segment_actual_forecast(
-        cube,
-        window,
-        dimensions=["region", "channel", "category"],
-        measure="net_revenue_inr",
-        national_factor=factor,
-    )
-    return Attributor(seed=7).attribute(
-        frame,
-        ["region", "channel", "category"],
-        actual_column="actual",
-        forecast_column="forecast",
-    )
