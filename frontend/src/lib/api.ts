@@ -35,6 +35,12 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Every request takes the caller's `AbortSignal`. React Query hands one to each
+ * `queryFn` and aborts it when the component unmounts or the key changes, so
+ * threading it through is what makes navigating away from a slow screen actually
+ * stop the work rather than merely stop rendering it.
+ */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -56,25 +62,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string; version: string; llm_provider: string }>('/api/health'),
-  roles: () => request<RoleSummary[]>('/api/session/roles'),
-  session: () => request<SessionResponse>('/api/session'),
+  health: (signal?: AbortSignal) =>
+    request<{ status: string; version: string; llm_provider: string }>('/api/health', { signal }),
+  roles: (signal?: AbortSignal) => request<RoleSummary[]>('/api/session/roles', { signal }),
+  session: (signal?: AbortSignal) => request<SessionResponse>('/api/session', { signal }),
   setRole: (role: string) =>
     request<SessionResponse>('/api/session/role', {
       method: 'POST',
       body: JSON.stringify({ role }),
     }),
-  insights: (params: { status?: string; kpi?: string } = {}) => {
+  insights: (params: { status?: string; kpi?: string } = {}, signal?: AbortSignal) => {
     const pairs = Object.entries(params).flatMap(([key, value]) =>
       value ? [[key, value] as [string, string]] : [],
     );
     const query = new URLSearchParams(pairs).toString();
-    return request<InsightSummary[]>(`/api/insights${query ? `?${query}` : ''}`);
+    return request<InsightSummary[]>(`/api/insights${query ? `?${query}` : ''}`, { signal });
   },
-  insight: (id: string) => request<InsightPayload>(`/api/insights/${id}`),
-  narrative: (id: string, persona: string) =>
-    request<NarrativeResponse>(`/api/insights/${id}/narrative?persona=${persona}`),
-  evidence: (id: string) => request<EvidenceDrawer>(`/api/insights/${id}/evidence`),
+  insight: (id: string, signal?: AbortSignal) =>
+    request<InsightPayload>(`/api/insights/${id}`, { signal }),
+  narrative: (id: string, persona: string, signal?: AbortSignal) =>
+    request<NarrativeResponse>(`/api/insights/${id}/narrative?persona=${persona}`, { signal }),
+  evidence: (id: string, signal?: AbortSignal) =>
+    request<EvidenceDrawer>(`/api/insights/${id}/evidence`, { signal }),
   feedback: (id: string, text: string) =>
     request<{ label: string; reason: string }>(`/api/insights/${id}/feedback`, {
       method: 'POST',
@@ -82,12 +91,13 @@ export const api = {
     }),
   ask: (question: string) =>
     request<AskResponse>('/api/ask', { method: 'POST', body: JSON.stringify({ question }) }),
-  sources: () => request<SourceSummary[]>('/api/sources'),
-  freshness: () => request<FreshnessResponse[]>('/api/freshness'),
-  dq: () => request<DQResponse[]>('/api/dq'),
-  telemetry: () => request<TelemetryResponse>('/api/telemetry'),
-  calibration: () => request<CalibrationResponse>('/api/calibration'),
-  audit: () => request<AuditEntry[]>('/api/audit'),
+  sources: (signal?: AbortSignal) => request<SourceSummary[]>('/api/sources', { signal }),
+  freshness: (signal?: AbortSignal) => request<FreshnessResponse[]>('/api/freshness', { signal }),
+  dq: (signal?: AbortSignal) => request<DQResponse[]>('/api/dq', { signal }),
+  telemetry: (signal?: AbortSignal) => request<TelemetryResponse>('/api/telemetry', { signal }),
+  calibration: (signal?: AbortSignal) =>
+    request<CalibrationResponse>('/api/calibration', { signal }),
+  audit: (signal?: AbortSignal) => request<AuditEntry[]>('/api/audit', { signal }),
   demo: (control: 'inject-event' | 'break-feed', target: string) =>
     request<{ control: string; detail: string; sim_time: string }>(`/api/demo/${control}`, {
       method: 'POST',

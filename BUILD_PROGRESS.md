@@ -1,6 +1,6 @@
 # Build Progress
 Updated: 2026-08-29T23:20:00Z
-Current phase: P12
+Current phase: COMPLETE — P0 through P12 are DONE
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -16,7 +16,7 @@ Current phase: P12
 | P9 | API | DONE | `make verify-p9` | PASS | 25 tests in 4.5s; every response a pydantic model so the OpenAPI schema is the frontend's contract; role switching exercised through HTTP; abstentions are first-class list rows; a cold start returns 503 with the command to fix it, not a 500 |
 | P10 | Frontend | DONE | `make verify-p10` | PASS | tsc+vite build clean, 7 vitest, 6 Playwright E2E against the live API in 30.2s; 32 screenshots captured and reviewed by eye, one grid defect found and fixed (sources strip last row stretched by `flex-1`); no horizontal scroll at 768px, every async panel has a skeleton and an empty state, no chart uses two y-axes |
 | P11 | Calibration backtest, learning, evals | DONE | `make verify-p11` | PASS with four recorded shortfalls | 32 P11 tests; 416 ledger events replayed through the real engine, temporal split at 2025-07-01 (298 fitted / 118 held out, 5 demo events excluded); tier boundaries derived from the fitted curve and explicitly NOT adopted at 0.531 discrimination; two source defects fixed (missing confidence NumberFact took numeric fidelity 0.667 to 1.000; mock cited documents that never existed so cite-or-drop rejected everything). Four targets missed and recorded below with their measured numbers |
-| P12 | Seed, document, harden, verify | PENDING | `make verify-p12` | — | |
+| P12 | Seed, document, harden, verify | DONE | `make verify-p12` | PASS | lint/mypy --strict/tsc/eslint/prettier all clean; 11 hardening tests covering all five degraded conditions; `make demo` rebuilt everything from a wiped warehouse in one command (1,623 batches, 80,954 rows, scenario detected, cache pre-warmed, serving); 7 Playwright E2E green including a new no-page-error/no-unhandled-rejection assertion; 298 tests in the full suite. Five defects found and fixed: the E2E suite was outside every tsconfig project so typed linting never parsed it; requests were not cancellable (the AbortSignal was dropped); unhandled rejections were invisible; a 404 on every page load; and the role-switch E2E test was racy and failing |
 
 ## Deferred items
 
@@ -55,6 +55,14 @@ Current phase: P12
   but 42% day coverage is lower than that alone explains. National revenue validates at
   Rs 853 cr and every P2 acceptance test passes, so the aggregate is unaffected;
   flagged for a look before P11's backtest, which slices by region.
+
+- **The blended marketing elasticity level is still not recovered**, but the
+  *improvement* now passes as a graded metric: naive 0.0217, DAG-specified 0.0662,
+  planted 0.1430 — **1.58x closer** against a 1.5x target, n = 131 whole weeks. The
+  comparison moved out of the test suite into `evals/elasticity.py` so the gate and the
+  eval report cannot quote different numbers for the same quantity, and the planted
+  value is read from `world/config.yaml` rather than transcribed, so a change to the
+  world cannot leave a stale answer key behind.
 
 - **Four P11 eval targets are missed. Measured numbers, not adjusted targets:**
 

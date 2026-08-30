@@ -81,11 +81,14 @@ export function Ask() {
 }
 
 export function Actions() {
-  const insights = useQuery({ queryKey: ['insights', ''], queryFn: () => api.insights({}) });
+  const insights = useQuery({
+    queryKey: ['insights', ''],
+    queryFn: ({ signal }) => api.insights({}, signal),
+  });
   const first = insights.data?.find((item) => item.status === 'published');
   const detail = useQuery({
     queryKey: ['insight', first?.insight_id],
-    queryFn: () => api.insight(first!.insight_id),
+    queryFn: ({ signal }) => api.insight(first!.insight_id, signal),
     enabled: Boolean(first),
   });
 
@@ -186,7 +189,7 @@ const CONTROLS = [
 ];
 
 export function Admin() {
-  const roles = useQuery({ queryKey: ['roles'], queryFn: api.roles });
+  const roles = useQuery({ queryKey: ['roles'], queryFn: ({ signal }) => api.roles(signal) });
   return (
     <div className="space-y-6">
       <Card>

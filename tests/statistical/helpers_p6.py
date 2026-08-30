@@ -11,17 +11,15 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
 from insight_copilot.contracts.registry import ContractRegistry
 from insight_copilot.engine.attribute_where import Attributor
-from insight_copilot.engine.attribute_why import newey_west_lags
 from insight_copilot.engine.cube import CubeWindow, national_factor, segment_actual_forecast
 from insight_copilot.engine.dataset import EngineDataset
-from insight_copilot.engine.design import adstock, fourier_terms
 from insight_copilot.engine.detect import ConformalDetector, apply_fdr
 from insight_copilot.engine.regression_baseline import RegressionBaseline, calendar_events
 from insight_copilot.engine.series import Series
+from insight_copilot.evals.elasticity import media_elasticities as library_elasticities
 from insight_copilot.ingest.warehouse import Warehouse
 from insight_copilot.security.audit import InMemoryAuditLog
 from insight_copilot.security.compiler import ContractSQLCompiler
@@ -192,32 +190,13 @@ def pvm_periods(engine: Engine) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def media_elasticities(engine: Engine) -> tuple[float, float]:
-    """The naive and the DAG-specified blended marketing elasticity."""
-    frame = weekly_frame(engine.warehouse)
-    target = np.log(frame["units"].to_numpy(dtype=float))
-    index = np.arange(len(frame), dtype=float)
-    carried = np.log(np.clip(adstock(frame["spend"].to_numpy(dtype=float) / 7.0, 7.0), 1.0, None))
-    naive = sm.OLS(target, sm.add_constant(pd.DataFrame({"media": carried}))).fit()
-    controls = pd.concat(
-        [
-            pd.DataFrame(
-                {
-                    "media": carried,
-                    "price_index": np.log(frame["asp"].to_numpy(dtype=float)),
-                    "fill_rate": np.log(
-                        np.clip(frame["fill"].to_numpy(dtype=float), 1.0, None) / 100.0
-                    ),
-                    "trend": index / 52.0,
-                }
-            ),
-            fourier_terms(index * 7.0, 365.25, 2),
-        ],
-        axis=1,
-    )
-    dag = sm.OLS(target, sm.add_constant(controls)).fit(
-        cov_type="HAC", cov_kwds={"maxlags": newey_west_lags(len(frame))}
-    )
-    return float(naive.params["media"]), float(dag.params["media"])
+    """The naive and the DAG-specified blended marketing elasticity.
+
+    Delegates to the library implementation the eval report also prints, so the gate and
+    the report can never quote different numbers for the same quantity.
+    """
+    comparison = library_elasticities(engine.warehouse)
+    return comparison.naive, comparison.dag_specified
 
 
 def contracts_registry() -> ContractRegistry:

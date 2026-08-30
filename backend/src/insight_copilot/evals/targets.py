@@ -37,6 +37,13 @@ ENTITLEMENT_LEAKAGE_TARGET = 0.0
 LATENCY_TARGET_MS = 5000.0
 COST_PER_INSIGHT_TARGET_USD = 0.05
 
+ELASTICITY_IMPROVEMENT_TARGET = 1.5
+"""How many times closer the DAG-specified marketing elasticity must be to the planted
+value than the naive one. The *level* is not identified at national weekly grain on this
+world — recorded as a known issue with its measured number — but the *direction of the
+improvement* is exactly what the endogeneity demonstration claims, so that is what is
+graded."""
+
 MATERIAL_GAP_FLOOR_INR = 1e6
 """A window whose total gap is under ten lakh is one the system would not publish at
 all. Share error is only measured above it: the ratio of two near-zero numbers is

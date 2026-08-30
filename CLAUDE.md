@@ -10,7 +10,7 @@ Authoritative spec: `docs/CLAUDE-CODE-BUILD-PROMPT.md` (wins on conflict), then
 
 ## Current phase
 
-**P12 — Seed, document, harden, verify.** P0–P11 are DONE.
+**COMPLETE.** P0 through P12 are DONE. Read `HANDOVER.md` first.
 State of every phase: `BUILD_PROGRESS.md`.
 History: `BUILD_LOG.md`. Never mark a phase DONE without pasting its real gate
 output into `BUILD_LOG.md`.

@@ -30,11 +30,11 @@ export function InsightDetail() {
   const { persona, showProvenance } = useUi();
   const insight = useQuery({
     queryKey: ['insight', insightId],
-    queryFn: () => api.insight(insightId),
+    queryFn: ({ signal }) => api.insight(insightId, signal),
   });
   const narrative = useQuery({
     queryKey: ['narrative', insightId, persona],
-    queryFn: () => api.narrative(insightId, persona),
+    queryFn: ({ signal }) => api.narrative(insightId, persona, signal),
   });
 
   if (insight.isPending) return <Skeleton rows={6} />;

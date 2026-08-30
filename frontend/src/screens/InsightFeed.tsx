@@ -27,7 +27,7 @@ export function InsightFeed() {
   const [status, setStatus] = useState<string>('');
   const insights = useQuery({
     queryKey: ['insights', status],
-    queryFn: () => api.insights({ status: status || undefined }),
+    queryFn: ({ signal }) => api.insights({ status: status || undefined }, signal),
   });
 
   return (
@@ -111,7 +111,11 @@ function InsightCard({ insight }: { insight: InsightSummary }) {
 }
 
 function FreshnessStrip() {
-  const freshness = useQuery({ queryKey: ['freshness'], queryFn: api.freshness, retry: false });
+  const freshness = useQuery({
+    queryKey: ['freshness'],
+    queryFn: ({ signal }) => api.freshness(signal),
+    retry: false,
+  });
   return (
     <Card>
       <SectionTitle hint="Green means the drop that was due has arrived">Sources</SectionTitle>

@@ -29,8 +29,8 @@ const PERSONAS = ['cfo', 'analyst', 'rsm', 'marketing_lead'];
 export function Layout() {
   const { theme, toggleTheme, persona, setPersona, showProvenance, toggleProvenance } = useUi();
   const client = useQueryClient();
-  const roles = useQuery({ queryKey: ['roles'], queryFn: api.roles });
-  const session = useQuery({ queryKey: ['session'], queryFn: api.session });
+  const roles = useQuery({ queryKey: ['roles'], queryFn: ({ signal }) => api.roles(signal) });
+  const session = useQuery({ queryKey: ['session'], queryFn: ({ signal }) => api.session(signal) });
 
   return (
     <div className="min-h-screen bg-page">

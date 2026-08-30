@@ -1322,3 +1322,151 @@ precision target was *tightened* mid-phase, not loosened: an absolute 0.50 bar w
 being reported as a PASS on a corpus where 61% of scanned days lie inside some event
 window, so a coin would have scored 0.61 and "passed". Grading the lift instead turns
 that into the FAIL it always was.
+
+## P12 — Seed, document, harden, verify
+
+`make verify-p12` — lint, typecheck, contract validation, the hardening suite, and the
+production frontend build.
+
+```
+make lint
+.venv/bin/ruff check backend/src tests
+All checks passed!
+.venv/bin/ruff format --check backend/src tests
+cd frontend && npm run lint && npm run format:check
+
+> insight-copilot-frontend@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+> insight-copilot-frontend@0.1.0 format:check
+> prettier --check "src/**/*.{ts,tsx,css}"
+
+Checking formatting...
+All matched files use Prettier code style!
+make typecheck
+cd backend && ../.venv/bin/mypy
+Success: no issues found in 187 source files
+cd frontend && npm run typecheck
+
+> insight-copilot-frontend@0.1.0 typecheck
+> tsc -b --noEmit
+
+make validate-contracts
+.venv/bin/python -m insight_copilot.cli validate-contracts
+OK    6 KPI contracts:    blended_roas, gross_margin_pct, marketing_spend, net_revenue, order_fill_rate, unit_volume
+OK    11 source contracts: competitor_prices, holiday_calendar, inventory_snapshots, martech_weekly, news_articles, oms_orders, pim_products, pricing_memos, support_tickets, weather_daily, wms_fulfilment
+      blended_roas v1.1.0 — roles: analyst, cfo, intern(deny), marketing_lead, rsm_north(deny)
+      gross_margin_pct v1.0.1 — roles: analyst, cfo, intern(deny), marketing_lead, rsm_north
+      marketing_spend v1.1.0 — roles: analyst, cfo, intern(deny), marketing_lead, rsm_north(deny)
+      net_revenue v1.2.0 — roles: analyst, cfo, intern(deny), marketing_lead, rsm_north
+      order_fill_rate v1.0.2 — roles: analyst, cfo, intern, marketing_lead, rsm_north
+      unit_volume v1.1.0 — roles: analyst, cfo, intern, marketing_lead, rsm_north
+.venv/bin/pytest tests/integration/test_p12_hardening.py
+...........                                                              [100%]
+11 passed in 2.26s
+make build
+cd frontend && npm run build
+
+> insight-copilot-frontend@0.1.0 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 106 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.79 kB │ gzip:  0.48 kB
+dist/assets/index-KqFnK8p4.css   14.34 kB │ gzip:  3.82 kB
+dist/assets/index-CxmkH_5_.js   251.23 kB │ gzip: 77.78 kB
+✓ built in 2.19s
+```
+
+### `make demo` from a wiped warehouse
+
+`demo-reset` removed the warehouse, the landing zone and the run artifacts; `make demo`
+rebuilt everything in one command. Verbatim:
+
+```
+OK    world loaded and 30 sim-days replayed: 1623 batches, 80,954 rows
+OK    scenario run: net_revenue -41.46% on 2026-03-06 at p = 0.0026; tier Low
+OK    narrative cache pre-warmed: 4 narrative(s) cached in 8 ms
+OK    gold marts:
+      gold.fct_revenue_daily       1,479,826 rows
+      gold.fct_fulfilment_daily      483,152 rows
+      gold.fct_marketing_weekly        5,565 rows
+      gold.cube_revenue              302,717 rows
+      gold.driver_panel                4,151 rows
+      gold.dim_calendar                1,096 rows
+OK    serving on http://127.0.0.1:8000 — all data is simulated
+```
+
+`curl :8000/api/health` → 200. The four lines `docs/DEMO_SCRIPT.md` tells a presenter to
+wait for are exactly the four lines it printed.
+
+### Playwright, against that live backend
+
+```
+Running 7 tests using 1 worker
+
+  ✓  1 every screen renders with no horizontal page scroll at 768px (749ms)
+  ✓  2 the shell always states that the data is simulated (186ms)
+  ✓  3 switching role calls the API and the selection persists (444ms)
+  ✓  4 every async panel shows a skeleton or an explicit state, never a blank (4.9s)
+  ✓  5 the ask screen asks for clarification rather than guessing (741ms)
+  ✓  6 capture screenshots at both widths in both themes (22.0s)
+  ✓  7 no screen logs a page error or an unhandled rejection (4.8s)
+
+  7 passed (35.1s)
+```
+
+### Hardening — the five degraded conditions, each with its own test
+
+| Condition | Behaviour asserted |
+|---|---|
+| No LLM at all | Every persona narrates from templates, and each template **passes the number verifier** — the product is fully demonstrable with the model switched off |
+| Provider available, then fails mid-request | Degrades to the template path; the failure never propagates to the caller |
+| No NLI model installed | The entailment verifier falls back to its lexical check and **names the method that ran**, so a reader is never shown a score resting on a model that was not there |
+| Empty database | `/api/health` still 200; data endpoints 503 with the command that fixes it; the insight feed is an empty list, not an error |
+| A source permanently down | The `c4` hard gate forces `Insufficient` **regardless of how strong every other signal is** — asserted against a control case that is otherwise identical and does publish |
+
+Plus: `demo-reset` is idempotent and provably never touches `data/ledger.parquet`; the
+demo path emits **no Python warnings** from `insight_copilot` (asserted with
+`warnings.catch_warnings`); and the built app logs no page error and no unhandled
+rejection across all eight screens.
+
+### Five defects found while hardening, all fixed at source
+
+1. **The E2E suite was outside every tsconfig project**, so typed linting refused to
+   parse it — the one suite that drives a real browser was the only code nobody
+   typechecked. It now has `tsconfig.e2e.json`, which is the only project carrying the
+   DOM lib (the specs are the one place where Node-side test code and browser-side
+   `page.evaluate` callbacks share a file).
+2. **Long operations were not cancellable.** React Query hands every `queryFn` an
+   `AbortSignal` and the API client ignored it, so navigating away from a slow screen
+   stopped rendering the work but not doing it. Every client method now takes the
+   signal and passes it to `fetch`. Four call sites were also passing `api.freshness`
+   directly as a `queryFn`, which would have handed React Query's *context object* in
+   as the signal once the parameter existed.
+3. **Unhandled rejections were invisible.** A handler in `main.tsx` logs them loudly,
+   and exempts `AbortError` — a cancelled request is the new normal behaviour above,
+   not a failure, and reporting it as one would train a reader to ignore the channel.
+4. **A 404 on every page load** from the implicit `/favicon.ico` request. Declared
+   explicitly; the console is now clean.
+5. **The role-switching E2E test was racy** — it read the select's options once, before
+   `/api/session/roles` had returned, so its verdict depended on machine speed. Replaced
+   with Playwright's auto-retrying assertion. It was failing at the time it was found.
+
+Also fixed: `demo-reset` reported an already-empty landing directory as "removed",
+because it recreates the directory moments later via `ensure_dirs`. A second reset now
+correctly reports nothing to do, which is the signal that distinguishes a pristine state
+from a dirty one.
+
+### Written
+
+- `README.md` — what it is, an ASCII architecture diagram with the security boundary
+  drawn on it, setup, every make target, the four scenarios, role switching, the demo
+  controls, the LLM-vs-computed boundary table, the measured known limitations, and the
+  simulated-data statement in the second paragraph.
+- `docs/DEMO_SCRIPT.md` — the seven-minute running order: exact clicks, expected screen
+  state at each step, what to say, and a troubleshooting table.

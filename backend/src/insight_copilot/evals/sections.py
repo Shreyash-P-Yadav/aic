@@ -14,6 +14,7 @@ import numpy as np
 from insight_copilot.engine.calibration import IsotonicCalibrator
 from insight_copilot.evals.backtest import BacktestOutcome, BacktestResult
 from insight_copilot.evals.checks import LeakageFinding, NarrationScore
+from insight_copilot.evals.elasticity import ElasticityComparison
 from insight_copilot.evals.metrics import (
     DetectionCounts,
     brier_score,
@@ -30,6 +31,7 @@ from insight_copilot.evals.targets import (
     DETECTION_PRECISION_LIFT_TARGET,
     DETECTION_RECALL_TARGET,
     ECE_TARGET,
+    ELASTICITY_IMPROVEMENT_TARGET,
     ENTITLEMENT_LEAKAGE_TARGET,
     LATENCY_TARGET_MS,
     MATERIAL_GAP_FLOOR_INR,
@@ -265,6 +267,59 @@ def _recall(outcomes: list[BacktestOutcome], flagged: set[dt.date]) -> float:
         1 for item in outcomes if flagged & set(days_between(item.window_start, item.window_end))
     )
     return found / len(outcomes)
+
+
+def elasticity_section(comparison: ElasticityComparison) -> EvalSection:
+    """Naive versus DAG-specified marketing elasticity, both beside the planted truth.
+
+    The graded number is the *improvement* — how many times closer specifying the DAG
+    gets you — not the level. The level is not recoverable at national weekly grain on
+    this world and the report says so plainly rather than grading a number the data
+    cannot support; see the marketing-elasticity entry under Known issues.
+    """
+    return EvalSection(
+        name="Endogeneity",
+        detail=(
+            "Media budget is set as a share of revenue with a tactical overlay that "
+            "responds to last week's performance, so a naive regression of log units on "
+            "log adstocked spend is biased by construction. Both estimates are shown "
+            "against the value planted in the world config."
+        ),
+        measurements=[
+            Measurement(
+                name="naive elasticity",
+                value=comparison.naive,
+                n=comparison.observations,
+                detail="log units on log adstocked spend, nothing else — what a ROAS tile does",
+            ),
+            Measurement(
+                name="DAG-specified elasticity",
+                value=comparison.dag_specified,
+                n=comparison.observations,
+                detail=(
+                    "with price, fill rate, trend and annual seasonality, Newey-West "
+                    "errors, and the mediator (unit volume) deliberately excluded"
+                ),
+            ),
+            Measurement(
+                name="planted elasticity",
+                value=comparison.truth,
+                n=comparison.observations,
+                detail="sum of the six per-channel elasticities, read from the world config",
+            ),
+            Measurement(
+                name="times closer to truth than naive",
+                value=comparison.improvement,
+                target=ELASTICITY_IMPROVEMENT_TARGET,
+                direction="min",
+                n=comparison.observations,
+                detail=(
+                    "the graded number. The LEVEL is not recovered within 20% and is "
+                    "recorded as a known issue with its measured value"
+                ),
+            ),
+        ],
+    )
 
 
 def narration_section(score: NarrationScore) -> EvalSection:

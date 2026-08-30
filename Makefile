@@ -17,7 +17,7 @@ BACKEND := backend
         lint lint-backend lint-frontend format \
         typecheck typecheck-backend typecheck-frontend \
         test test-backend test-frontend \
-        dev dev-backend dev-frontend build generate backfill replay demo demo-reset \
+        dev dev-backend dev-frontend build generate backfill replay demo demo-reset backtest \
         validate-contracts generate-truth \
         verify-p0 verify-p1 verify-p2 verify-p3 verify-p4 verify-p5 verify-p6 \
         verify-p7 verify-p8 verify-p9 verify-p10 verify-p11 verify-p12 verify-all
@@ -107,6 +107,9 @@ demo:  ## One command: generate, backfill, ingest, run, serve
 demo-reset:  ## Restore the pristine demo state
 	$(PY) -m insight_copilot.cli demo-reset
 
+backtest:  ## Replay the truth ledger, fit calibration, write artifacts/eval_report.md
+	PYTHONPATH=backend/src $(PY) -m insight_copilot.cli backtest
+
 validate-contracts:  ## Validate every KPI and source contract
 	$(PY) -m insight_copilot.cli validate-contracts
 
@@ -153,7 +156,11 @@ verify-p11:
 	PYTHONPATH=backend/src $(PY) -m insight_copilot.cli backtest
 
 verify-p12:
-	cd frontend && npm run build && npm run test && npm run e2e/test_p12_hardening.py
+	$(MAKE) lint
+	$(MAKE) typecheck
+	$(MAKE) validate-contracts
+	$(PYTEST) tests/integration/test_p12_hardening.py
+	$(MAKE) build
 
 verify-all: verify-p0 verify-p1 verify-p2 verify-p3 verify-p4 verify-p5 verify-p6 \
             verify-p7 verify-p8 verify-p9 verify-p10 verify-p11 verify-p12  ## Every gate, in order

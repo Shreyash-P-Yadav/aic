@@ -240,6 +240,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     from insight_copilot.demo import run_demo
     from insight_copilot.errors import IngestionError
     from insight_copilot.harness.factory import build_harness
+    from insight_copilot.prewarm import prewarm
 
     cfg = get_settings()
     cfg.ensure_dirs()
@@ -258,6 +259,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         state.attach_warehouse(bundle.warehouse, bundle.harness, bundle.controls)
         result = run_demo(state, bundle.world, bundle.warehouse)
         print(f"OK    scenario run: {result.detail or 'no detection survived'}")
+        print(f"OK    narrative cache pre-warmed: {prewarm(state).detail}")
         _print_marts(bundle)
     except (IngestionError, SimulationError) as exc:
         print(f"FAIL  {exc.message}", file=sys.stderr)
@@ -312,6 +314,20 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo_reset(args: argparse.Namespace) -> int:
+    """Remove derived state so the next `make demo` starts from a clean warehouse."""
+    del args
+    from insight_copilot.reset import reset_demo
+
+    result = reset_demo()
+    print(f"OK    {result.detail}")
+    for path in result.removed:
+        print(f"      removed  {path}")
+    for note in result.preserved:
+        print(f"      kept     {note}")
+    return 0
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
@@ -323,7 +339,7 @@ COMMANDS: dict[str, Command] = {
     "backtest": _cmd_backtest,
     "demo": _cmd_demo,
     "serve": _cmd_serve,
-    "demo-reset": _not_yet("P12"),
+    "demo-reset": _cmd_demo_reset,
 }
 
 

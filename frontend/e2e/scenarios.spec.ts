@@ -56,15 +56,16 @@ test('switching role calls the API and the selection persists', async ({ page })
   await page.goto('/');
   const role = page.getByLabel('Role');
   await expect(role).toBeVisible();
-  const options = await role.locator('option').allTextContents();
-  expect(options.join(' ')).toContain('CFO');
+  // Auto-retrying, because the options arrive from /api/session/roles after the select
+  // has already rendered. Reading `allTextContents()` once races that request and makes
+  // the test's verdict depend on how fast the machine is, which is not a property of
+  // the app.
+  await expect(role.locator('option')).toContainText(['CFO']);
   await role.selectOption('cfo');
   await expect(role).toHaveValue('cfo');
 });
 
-test('every async panel shows a skeleton or an explicit state, never a blank', async ({
-  page,
-}) => {
+test('every async panel shows a skeleton or an explicit state, never a blank', async ({ page }) => {
   for (const screen of SCREENS) {
     await page.goto(screen.path);
     await page.waitForLoadState('networkidle');
@@ -99,4 +100,22 @@ test('capture screenshots at both widths in both themes', async ({ page }) => {
       }
     }
   }
+});
+
+test('no screen logs a page error or an unhandled rejection', async ({ page }) => {
+  // The P12 hardening requirement, asserted rather than claimed. `pageerror` catches a
+  // thrown exception; the console filter catches the rejection handler in main.tsx,
+  // which is the only thing that logs with that prefix.
+  const failures: string[] = [];
+  page.on('pageerror', (error) => failures.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('[insight-copilot]')) {
+      failures.push(message.text());
+    }
+  });
+  for (const screen of SCREENS) {
+    await page.goto(screen.path);
+    await page.waitForLoadState('networkidle');
+  }
+  expect(failures, failures.join('\n')).toEqual([]);
 });

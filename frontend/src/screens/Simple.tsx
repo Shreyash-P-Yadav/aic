@@ -55,9 +55,13 @@ function Panel<T>({
 }
 
 export function DataSources() {
-  const sources = useQuery({ queryKey: ['sources'], queryFn: api.sources });
-  const freshness = useQuery({ queryKey: ['freshness'], queryFn: api.freshness, retry: false });
-  const dq = useQuery({ queryKey: ['dq'], queryFn: api.dq, retry: false });
+  const sources = useQuery({ queryKey: ['sources'], queryFn: ({ signal }) => api.sources(signal) });
+  const freshness = useQuery({
+    queryKey: ['freshness'],
+    queryFn: ({ signal }) => api.freshness(signal),
+    retry: false,
+  });
+  const dq = useQuery({ queryKey: ['dq'], queryFn: ({ signal }) => api.dq(signal), retry: false });
   return (
     <div className="space-y-6">
       <SimulatedLabel />
@@ -139,7 +143,10 @@ export function DataSources() {
 }
 
 export function TrustCalibration() {
-  const calibration = useQuery({ queryKey: ['calibration'], queryFn: api.calibration });
+  const calibration = useQuery({
+    queryKey: ['calibration'],
+    queryFn: ({ signal }) => api.calibration(signal),
+  });
   return (
     <div className="space-y-6">
       <SimulatedLabel />
@@ -168,7 +175,10 @@ export function TrustCalibration() {
 }
 
 export function Telemetry() {
-  const telemetry = useQuery({ queryKey: ['telemetry'], queryFn: api.telemetry });
+  const telemetry = useQuery({
+    queryKey: ['telemetry'],
+    queryFn: ({ signal }) => api.telemetry(signal),
+  });
   return (
     <div className="space-y-6">
       <SimulatedLabel />
@@ -216,7 +226,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function Audit() {
-  const audit = useQuery({ queryKey: ['audit'], queryFn: api.audit });
+  const audit = useQuery({ queryKey: ['audit'], queryFn: ({ signal }) => api.audit(signal) });
   return (
     <div className="space-y-6">
       <SimulatedLabel />

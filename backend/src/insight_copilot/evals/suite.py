@@ -19,12 +19,14 @@ from insight_copilot.engine.tiers import TierBoundaries, derive_boundaries
 from insight_copilot.errors import StatisticalError
 from insight_copilot.evals.backtest import BacktestResult
 from insight_copilot.evals.checks import LeakageFinding, NarrationScore
+from insight_copilot.evals.elasticity import ElasticityComparison
 from insight_copilot.evals.models import EvalReport
 from insight_copilot.evals.sections import (
     attribution_section,
     budget_section,
     calibration_section,
     detection_section,
+    elasticity_section,
     entitlement_section,
     narration_section,
 )
@@ -42,6 +44,7 @@ def build_report(
     calibrator: IsotonicCalibrator,
     boundaries: TierBoundaries,
     narration: NarrationScore | None = None,
+    elasticity: ElasticityComparison | None = None,
     leakage: list[LeakageFinding] | None = None,
     ranker: RankerStatus | None = None,
     latency_ms: float | None = None,
@@ -55,6 +58,8 @@ def build_report(
         attribution_section(backtest.outcomes),
         detection_section(backtest),
     ]
+    if elasticity is not None:
+        sections.append(elasticity_section(elasticity))
     if narration is not None:
         sections.append(narration_section(narration))
     if leakage is not None:

@@ -2,9 +2,9 @@
 
 _All data in this report is simulated. Meridian Consumer Brands is a fictional company; no figure here describes a real business._
 
-Generated 2026-08-30 00:48 UTC.
+Generated 2026-08-30 01:39 UTC.
 
-**4 of 21 metrics missed their target.** Each is listed below with the measured number; none has been removed, reweighted or re-targeted to produce a pass.
+**4 of 25 metrics missed their target.** Each is listed below with the measured number; none has been removed, reweighted or re-targeted to produce a pass.
 
 ## Corpus
 
@@ -55,6 +55,17 @@ A flagged day counts as a true positive when it falls inside any ledger event wi
 | recall over the whole corpus | 48.8% | — | 416 | — |
 | days scanned | 939 | — | 939 | — |
 
+## Endogeneity
+
+Media budget is set as a share of revenue with a tactical overlay that responds to last week's performance, so a naive regression of log units on log adstocked spend is biased by construction. Both estimates are shown against the value planted in the world config.
+
+| metric | measured | target | n | verdict |
+|---|---:|---:|---:|---|
+| naive elasticity | 0.022 | — | 131 | — |
+| DAG-specified elasticity | 0.066 | — | 131 | — |
+| planted elasticity | 0.143 | — | 131 | — |
+| times closer to truth than naive | 1.578 | 1.500 | 131 | PASS |
+
 ## Narrative
 
 Every number in every generated sentence re-extracted and re-checked against the evidence bundle by the deterministic verifier. Citation coverage is measured over PUBLISHED claims: one the cite-or-drop filter rejected never reaches a reader.
@@ -79,7 +90,7 @@ Every contract compiled for every role; the compiled SQL itself is inspected, be
 
 | metric | measured | target | n | verdict |
 |---|---:|---:|---:|---|
-| insight latency | 881 ms | 5,000 ms | 1 | PASS |
+| insight latency | 866 ms | 5,000 ms | 1 | PASS |
 | LLM cost per insight | $0.0000 | $0.0500 | 1 | PASS |
 
 ## Tiers as measured

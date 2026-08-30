@@ -1,0 +1,26 @@
+{
+  // The E2E suite gets its own project because it is the one place where BOTH
+  // environments appear in one file: the test body runs in Node, and the callbacks
+  // passed to `page.evaluate` run in the browser. It therefore needs the DOM lib,
+  // which the other Node-side config (vite.config.ts and friends) must not have.
+  //
+  // Without a project of its own the specs sit outside every tsconfig, and typed
+  // linting refuses to parse them — leaving the one suite that drives a real browser
+  // as the only code nobody typechecks.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts"]
+}

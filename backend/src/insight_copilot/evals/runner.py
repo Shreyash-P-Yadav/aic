@@ -24,6 +24,7 @@ from insight_copilot.errors import ContractError, StatisticalError
 from insight_copilot.evals.backtest import CalibrationBacktest
 from insight_copilot.evals.checks import NarrationScore, check_entitlements, score_narration
 from insight_copilot.evals.corpus import documents_from_warehouse
+from insight_copilot.evals.elasticity import ElasticityComparison, media_elasticities
 from insight_copilot.evals.models import EvalReport
 from insight_copilot.evals.report import write_report
 from insight_copilot.evals.suite import build_report, fit_calibrator
@@ -119,6 +120,7 @@ def _run(
             "itself uncalibrated rather than claiming a calibration it has not earned"
         )
 
+    elasticity = _elasticity(warehouse)
     leakage = check_entitlements(state.registry, ContractSQLCompiler(state.registry, state.audit))
     narration = _narration(state)
     ranker = PriorityRanker(FeedbackStore(config.data_dir / "feedback.jsonl")).status
@@ -128,6 +130,7 @@ def _run(
         calibrator=fit.calibrator,
         boundaries=fit.boundaries,
         narration=narration,
+        elasticity=elasticity,
         leakage=leakage,
         ranker=ranker,
         latency_ms=per_event_ms,
@@ -136,6 +139,15 @@ def _run(
     )
     markdown, json_path = write_report(report, config.artifacts_dir)
     return EvalRun(report=report, markdown=markdown, json=json_path)
+
+
+def _elasticity(warehouse: Warehouse) -> ElasticityComparison | None:
+    """The endogeneity comparison, or nothing when the marts it needs are absent."""
+    try:
+        return media_elasticities(warehouse)
+    except (ContractError, StatisticalError, KeyError) as exc:
+        logger.warning("evals.elasticity_failed", error=str(exc))
+        return None
 
 
 def _seed_insights(state: AppState, warehouse: Warehouse, documents: list[Document]) -> None:
