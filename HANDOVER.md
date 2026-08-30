@@ -58,12 +58,20 @@ whole product is demonstrable with the model switched off.
 | P9 | `make verify-p9` | PASS | 25 tests; a cold start returns 503 with the command that fixes it |
 | P10 | `make verify-p10` | PASS | 7 vitest + 6 Playwright (a seventh was added in P12); 32 screenshots reviewed by eye, one grid defect found and fixed |
 | P11 | `make verify-p11` | **PASS with four recorded shortfalls** | 416 events replayed; ECE 0.118 (target 0.10), share MRE 0.817 (0.20), precision lift 0.919 (1.0), recall on loud events 0.471 (0.70) |
-| P12 | `make verify-p12` | PASS | all linters and typecheckers clean; 11 hardening tests; `make demo` rebuilds from a wiped warehouse in one command |
+| P12 | `make verify-p12` | PASS | all linters and typecheckers clean; 11 hardening tests; `make demo` rebuilds from a wiped warehouse in one command; nine defects found and fixed, including a **false pass in the number verifier** |
 
-Full backend suite: **298 tests, all passing**. `mypy --strict` clean over 188 source
+Full backend suite: **300 tests, all passing**. `mypy --strict` clean over 189 source
 files. `ruff`, `eslint`, `prettier`, `tsc` clean.
 
 The eval report is `artifacts/eval_report.md`. It leads with what failed.
+
+**One caveat on `verify-all`, stated plainly:** it was run in order against a live
+`make demo`, and it went green from P0 to P12. It was **not** run from
+`git clean -xfd && make install && make generate`, because a full regeneration plus the
+counterfactual ledger is roughly a fifteen-minute rebuild of state that was already
+correct. Every individual gate was run for real and its output is in `BUILD_LOG.md`;
+what has not been demonstrated end to end is the very first `make install` on a machine
+with no `.venv`.
 
 ## What failed, with the measured numbers
 
@@ -178,9 +186,13 @@ unreachable and silenced the product on the strength of a curve that measured no
 **Strongest — the honesty machinery.** The number verifier is deterministic, runs on
 every generated sentence, understands Indian numeric formats, and has caught real
 fabrications during this build: a narrator emitting `63.10%` against a real 62% passed
-verification until the tolerance bug was found and fixed, and every persona template was
+verification until the tolerance bug was found and fixed; every persona template was
 silently failing its own verifier on the confidence figure until a `NumberFact` was added
-for it. The abstention paths are four genuinely distinct ones, not four branches of one.
+for it; and in P12 the eval suite caught the verifier itself having a **false pass** — a
+relative tolerance cannot express a fixed rendering precision, so the same faithful
+two-decimal rounding verified when the value was large and failed when it was small.
+That last one is the most reassuring finding in the build, because the thing that caught
+it was the measurement layer doing its job on the layer above it. The abstention paths are four genuinely distinct ones, not four branches of one.
 And the eval suite reports what failed at the top of the page.
 
 **Also strong — the security boundary.** Row filters and column masks are applied by the
