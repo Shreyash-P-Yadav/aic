@@ -9,10 +9,14 @@ narration, entitlements and budgets on the live demo path.
 from __future__ import annotations
 
 import datetime as dt
+import os
+import shutil
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 
 from insight_copilot.api.state import AppState
@@ -79,11 +83,35 @@ def run_evals(
             "the truth ledger has not been generated",
             detail=f"{ledger_file} is missing; run `make generate-truth` first",
         )
-    warehouse = Warehouse(config.warehouse_path)
+    warehouse, snapshot = _open_warehouse(config)
     try:
         return _run(config, warehouse, pd.read_parquet(ledger_file), cut_date)
     finally:
         warehouse.close()
+        if snapshot is not None:
+            snapshot.unlink(missing_ok=True)
+
+
+def _open_warehouse(config: Settings) -> tuple[Warehouse, Path | None]:
+    """Open the warehouse, snapshotting it first if a running server holds the lock.
+
+    DuckDB permits one writer OR several readers, and `make demo` holds a writer for as
+    long as it serves — so running the eval suite against a live demo would otherwise
+    fail on a lock rather than on anything to do with the evals. The backtest only ever
+    reads, so a file copy is a correct snapshot; it is taken to a temporary path,
+    reported, and removed afterwards. The alternative — making the gate order-dependent
+    on which server happens to be up — is the kind of constraint nobody remembers.
+    """
+    try:
+        return Warehouse(config.warehouse_path), None
+    except duckdb.IOException as exc:
+        logger.info("evals.snapshotting_warehouse", reason=str(exc))
+    handle, path = tempfile.mkstemp(prefix="insight-copilot-eval-", suffix=".duckdb")
+    os.close(handle)
+    snapshot = Path(path)
+    shutil.copyfile(config.warehouse_path, snapshot)
+    logger.info("evals.snapshot_ready", path=str(snapshot))
+    return Warehouse(snapshot), snapshot
 
 
 def _run(

@@ -2,7 +2,7 @@
 
 _All data in this report is simulated. Meridian Consumer Brands is a fictional company; no figure here describes a real business._
 
-Generated 2026-08-30 01:39 UTC.
+Generated 2026-08-30 02:23 UTC.
 
 **4 of 25 metrics missed their target.** Each is listed below with the measured number; none has been removed, reweighted or re-targeted to produce a pass.
 
@@ -90,7 +90,7 @@ Every contract compiled for every role; the compiled SQL itself is inspected, be
 
 | metric | measured | target | n | verdict |
 |---|---:|---:|---:|---|
-| insight latency | 866 ms | 5,000 ms | 1 | PASS |
+| insight latency | 885 ms | 5,000 ms | 1 | PASS |
 | LLM cost per insight | $0.0000 | $0.0500 | 1 | PASS |
 
 ## Tiers as measured

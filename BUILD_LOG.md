@@ -1470,3 +1470,44 @@ from a dirty one.
   simulated-data statement in the second paragraph.
 - `docs/DEMO_SCRIPT.md` — the seven-minute running order: exact clicks, expected screen
   state at each step, what to say, and a troubleshooting table.
+
+### `make verify-all`, end to end
+
+Run against a live `make demo` on :8000, so the P10 E2E gate had a real backend to drive.
+Every gate in order:
+
+```
+verify-p0    5 passed in 1.04s          (plus lint, mypy --strict, tsc, vite build)
+verify-p1   40 passed in 0.86s
+verify-p2   25 passed in 37.32s
+verify-p3   19 passed in 89.66s
+verify-p4   52 passed in 163.83s
+verify-p5   18 passed in 753.76s
+verify-p6   23 passed, 2 warnings in 732.83s
+verify-p7   17 passed in 75.28s
+verify-p8   31 passed in 0.43s
+verify-p9   25 passed in 5.15s
+verify-p10   7 vitest + 7 Playwright, 32 screenshots re-captured
+verify-p11  32 passed in 1.36s, then the eval suite over 416 events
+verify-p12  lint + typecheck + contracts + 11 hardening tests + production build
+```
+
+**One defect found by running the gates in order**, and fixed: `verify-p11` failed on a
+DuckDB lock, because `verify-p10` needs a live server and DuckDB permits one writer *or*
+several readers. The backtest only ever reads, so `run_evals` now snapshots the warehouse
+to a temporary file when the lock is held, reports that it did, and removes the copy
+afterwards. Making the gate order depend on which server happens to be up is the kind of
+constraint nobody remembers, and it would have failed for the next person on a clean
+clone with the demo running.
+
+The eval suite's four recorded shortfalls (P11, above) are unchanged: they are reported
+as FAIL in `artifacts/eval_report.md` and the command still exits 0, because the report
+is the artifact and the shortfalls are recorded in `BUILD_PROGRESS.md` with their
+measured numbers, which is what the P11 gate asks for.
+
+Also added in this pass: `evals/elasticity.py` moves the naive-vs-DAG-specified
+marketing-elasticity comparison out of the test suite and into the library, so the eval
+report can print it and the gate and the report cannot quote different numbers for the
+same quantity. The planted value is read from `world/config.yaml` rather than
+transcribed. Measured: naive **0.0217**, DAG-specified **0.0662**, planted **0.1430** —
+**1.58x closer**, against a 1.5x target, n = 131 whole weeks.
