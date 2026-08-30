@@ -157,7 +157,7 @@ class InsightEngine:
             delta_pct=detection.delta_pct,
             detection_method=detection.method,
             p_value=detection.p_value,
-            numbers=numbers_for(inputs),
+            numbers=numbers_for(inputs, confidence),
             segments=segments_for(inputs.where),
             price_effect=inputs.price_effect,
             volume_effect=inputs.volume_effect,

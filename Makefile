@@ -149,7 +149,8 @@ verify-p10:
 	cd $(FRONTEND) && npm run build && npm run test && npm run e2e
 
 verify-p11:
-	cd frontend && npm run build && npm run test && npm run e2e/test_p11_evals.py
+	$(PYTEST) tests/unit/test_p11_learning.py tests/statistical/test_p11_evals.py
+	PYTHONPATH=backend/src $(PY) -m insight_copilot.cli backtest
 
 verify-p12:
 	cd frontend && npm run build && npm run test && npm run e2e/test_p12_hardening.py

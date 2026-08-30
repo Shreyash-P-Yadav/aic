@@ -235,6 +235,9 @@ class ConfidenceResult:
     tier: Tier
     calibration_fitted: bool
     hard_gate_failures: list[str] = field(default_factory=list)
+    tier_basis: str = "contract bands; no fitted reliability curve yet"
+    """Where the tier boundaries came from. Law 4: a tier is a claim, and a claim
+    carries its provenance."""
 
     @property
     def abstained(self) -> bool:

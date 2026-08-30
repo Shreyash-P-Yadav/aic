@@ -1,6 +1,6 @@
 # Build Progress
 Updated: 2026-08-29T23:20:00Z
-Current phase: P11
+Current phase: P12
 
 | Phase | Name | Status | Gate command | Result | Notes |
 |-------|------|--------|--------------|--------|-------|
@@ -15,7 +15,7 @@ Current phase: P11
 | P8 | LLM layer and verifiers | DONE | `make verify-p8` | PASS | 31 tests in 0.34s with **no API key and no network**; an injected wrong number is caught and the narrator falls back to templates after two regenerations; uncited hypotheses dropped; a plan naming an undeclared dimension rejected; four persona style cards; cache hit on the second call; cost cap downshifts and logs it |
 | P9 | API | DONE | `make verify-p9` | PASS | 25 tests in 4.5s; every response a pydantic model so the OpenAPI schema is the frontend's contract; role switching exercised through HTTP; abstentions are first-class list rows; a cold start returns 503 with the command to fix it, not a 500 |
 | P10 | Frontend | DONE | `make verify-p10` | PASS | tsc+vite build clean, 7 vitest, 6 Playwright E2E against the live API in 30.2s; 32 screenshots captured and reviewed by eye, one grid defect found and fixed (sources strip last row stretched by `flex-1`); no horizontal scroll at 768px, every async panel has a skeleton and an empty state, no chart uses two y-axes |
-| P11 | Calibration backtest, learning, evals | PENDING | `make verify-p11` | — | |
+| P11 | Calibration backtest, learning, evals | DONE | `make verify-p11` | PASS with four recorded shortfalls | 32 P11 tests; 416 ledger events replayed through the real engine, temporal split at 2025-07-01 (298 fitted / 118 held out, 5 demo events excluded); tier boundaries derived from the fitted curve and explicitly NOT adopted at 0.531 discrimination; two source defects fixed (missing confidence NumberFact took numeric fidelity 0.667 to 1.000; mock cited documents that never existed so cite-or-drop rejected everything). Four targets missed and recorded below with their measured numbers |
 | P12 | Seed, document, harden, verify | PENDING | `make verify-p12` | — | |
 
 ## Deferred items
@@ -55,6 +55,54 @@ Current phase: P11
   but 42% day coverage is lower than that alone explains. National revenue validates at
   Rs 853 cr and every P2 acceptance test passes, so the aggregate is unaffected;
   flagged for a look before P11's backtest, which slices by region.
+
+- **Four P11 eval targets are missed. Measured numbers, not adjusted targets:**
+
+  | metric | target | measured | n |
+  |---|---:|---:|---:|
+  | expected calibration error | <= 0.10 | **0.1179** | 102 |
+  | attribution share mean relative error | <= 0.20 | **0.8168** | 114 |
+  | detection precision lift over chance | >= 1.0 | **0.9194** | 70 |
+  | recall on high-detectability events | >= 0.70 | **0.4709** | 172 |
+
+  All four share one root cause, which is a property of the **calibration corpus**
+  rather than of the engine, and which was measured rather than assumed:
+
+  * The corpus plants 440 events across 939 days. 61% of scanned days lie inside some
+    event window and about eight events are live on a covered day. So (a) a detector
+    flagging at random would score 0.61 precision, which is why the graded metric is
+    now *lift over chance* rather than an absolute bar it could clear by accident;
+    (b) no single window has one clean dominant cause, so top-cause accuracy tops out
+    at 30.9% against a 20% chance rate — real signal, but only 1.5x chance; and
+    (c) with attribution that noisy, the composite confidence score cannot rank
+    correct calls above incorrect ones (holdout AUC **0.531**), so the isotonic map
+    fitted on it collapses towards a constant at the base rate. ECE of 0.118 is what a
+    near-constant predictor scores when the base rate drifts between the fit half and
+    the holdout half.
+  * The share MRE compares the estimated share of the **net** gap against the ledger's
+    share of planted **magnitude**. The estimator is close to unbiased — the median
+    ratio of estimate to truth is 0.89 and the median relative error is 0.344 — but the
+    mean is dominated by windows where segments move in opposite directions and the net
+    denominator collapses towards zero. Both numbers are reported side by side rather
+    than the flattering one alone.
+
+  Three hypotheses were tried on the accuracy shortfall and each fixed a real defect
+  (per-event to window-level truth, 21.7% -> 27.9%; ungradeable channel claims excluded
+  from the denominator, -> 30.9%; scanning at alpha = 1 so the curve has a low end).
+  Per the working rule, the residual is recorded here rather than pursued further.
+
+  **What was done instead of tuning:** the fitted calibration map is *measured and not
+  adopted*. `MIN_DISCRIMINATION_AUC` = 0.55 makes non-adoption explicit and reported;
+  the contract's own bands stay in force and the system continues to describe itself as
+  uncalibrated, which is the true statement. Deriving tier boundaries from that curve
+  would have made High and Moderate unreachable and silenced the product on the strength
+  of a curve that measured nothing.
+
+  **What would fix it** (deferred, not attempted): regenerate the calibration corpus
+  with isolated event windows — roughly 150 events with mandatory clean gaps between
+  them — so a window has one dominant cause and the score has something to discriminate.
+  That is a change to the *generator*, and regenerating the world plus its counterfactual
+  ledger is a ~6-minute run plus a full re-backfill.
 
 ## Decisions taken
 

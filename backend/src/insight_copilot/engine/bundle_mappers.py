@@ -42,11 +42,18 @@ def confidence_fact(result: ConfidenceResult) -> ConfidenceFact:
         tier=result.tier,
         weakest_signal=result.weakest.name,
         hard_gate_failures=result.hard_gate_failures,
+        tier_basis=result.tier_basis,
     )
 
 
-def numbers_for(inputs: RunInputs) -> list[NumberFact]:
-    """Every number a sentence about this insight may contain."""
+def numbers_for(inputs: RunInputs, confidence: ConfidenceResult | None = None) -> list[NumberFact]:
+    """Every number a sentence about this insight may contain.
+
+    The calibrated confidence is among them. It is a computed number like any other,
+    every persona template prints it, and a number a narrator may write that the
+    verifier cannot check is exactly the hole the verifier exists to close — a
+    template failing its own verifier on a figure the system itself produced.
+    """
     detection = inputs.detection
     unit = inputs.contract.definition.unit
     facts = [
@@ -74,6 +81,32 @@ def numbers_for(inputs: RunInputs) -> list[NumberFact]:
     ):
         if value is not None:
             facts.append(NumberFact(key=name, value=value, unit=unit, method="Bennet indicator"))
+    if confidence is not None:
+        facts.append(
+            NumberFact(
+                key="calibrated_confidence",
+                value=confidence.calibrated,
+                unit="fraction",
+                method="softmin of six measured signals, then the calibration map",
+            )
+        )
+        facts.append(
+            NumberFact(
+                key="composite_confidence",
+                value=confidence.composite,
+                unit="fraction",
+                method="softmin(p=-4) over the six signals",
+            )
+        )
+        facts.extend(
+            NumberFact(
+                key=f"signal_{item.name}",
+                value=item.value,
+                unit="fraction",
+                method=item.detail,
+            )
+            for item in confidence.signals
+        )
     facts.append(
         NumberFact(
             key="confidence_level",

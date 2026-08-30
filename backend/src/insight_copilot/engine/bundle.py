@@ -144,6 +144,7 @@ class ConfidenceFact(StrictModel):
     tier: Tier
     weakest_signal: str
     hard_gate_failures: list[str] = Field(default_factory=list)
+    tier_basis: str = ""
 
 
 class InsightEvidenceBundle(StrictModel):

@@ -1222,3 +1222,103 @@ route; every async panel renders a `Skeleton` while pending and an `EmptyState` 
 typed error state) when empty; no chart uses two y-axes — `DriverChart` puts contributions
 on one axis and the counterfactual band on the same one, because a second axis lets a
 reader read any relationship they like into two unrelated scales.
+
+## P11 — Calibration backtest, learning loop, evals
+
+`make verify-p11` — the P11 unit and statistical tests, then the full eval suite over
+the truth ledger.
+
+```
+.venv/bin/pytest tests/unit/test_p11_learning.py tests/statistical/test_p11_evals.py
+................................                                         [100%]
+32 passed in 1.09s
+PYTHONPATH=backend/src .venv/bin/python -m insight_copilot.cli backtest
+OK    416 events replayed (298 fitted, 118 held out, 5 demo events excluded)
+      FAIL  expected calibration error: 0.1179 (n = 102)
+      FAIL  share mean relative error: 0.8168 (n = 114)
+      FAIL  precision lift over chance: 0.9194 (n = 70)
+      FAIL  recall on high-detectability events: 0.4709 (n = 172)
+      PASS  numeric fidelity: 1.0000 (n = 12)
+      PASS  citation coverage: 1.0000 (n = 2)
+      PASS  entitlement leakage: 0.0000 (n = 1)
+      PASS  insight latency: 881.0272 (n = 1)
+      PASS  LLM cost per insight: 0.0000 (n = 1)
+OK    report written to /home/user/aic/artifacts/eval_report.md and /home/user/aic/artifacts/eval_report.json
+```
+
+Full backend suite after the change: `pytest -q -m "not slow"` → **287 passed**.
+`mypy --strict` clean over 185 source files; `ruff check` clean.
+
+### What the backtest actually does
+
+416 of the 445 ledger events replayed through the real engine — one counterfactual fit
+that excludes every ledger window, one conformal scan, then per window: Adtributor over
+the cube, evidence retrieval against the corpus **read back out of silver** (not the
+generator's in-memory documents, which carry `event_id` the projection strips), and the
+six confidence signals. The ledger supplies the answer key only afterwards. The five
+demo-scenario events are excluded from the fit by the ledger's own flag; the temporal
+split is at 2025-07-01 — 298 events fitted, 118 held out.
+
+### Three defects found and fixed at source
+
+1. **The question was unanswerable, and the first run scored at chance.** Grading "was
+   *this event's* top region named" returned 21.7% — flat across high, medium and low
+   detectability, against a 20% chance rate on five regions. Flat is the tell. The
+   corpus plants events densely (about eight live on any covered day), so the movement
+   in one event's window is the sum of that event and its neighbours. Replaced with a
+   **window-level** answer key (`evals/truth.py`): every event overlapping the window,
+   weighted by its own recorded isolated contribution **pro-rated to the overlapping
+   days**. Without the pro-rating a six-month price change dominates every week it
+   touches; with it, the flagship week's dominant region comes out North, which is the
+   planted DC-North outage. 21.7% → 27.9%.
+2. **Ungradeable claims were being scored wrong.** A top segment naming only a channel
+   has no answer key — the generator plants no channel-scoped mechanism — and 40 of 416
+   were being counted as failures. They now drop out of the denominator. 27.9% → 30.9%.
+3. **The corpus had no low end.** The detector returns only days at or under its alpha,
+   so scanning at the operational 0.05 dropped every quiet window and the calibration
+   curve had nothing below the detection threshold — a curve fitted only on events that
+   were already detected reports the system as well calibrated exactly where it never
+   has to judge. The backtest now scans at alpha = 1 to *score* every day and applies
+   the operational threshold itself.
+
+Two further defects surfaced by the narrative eval, both fixed at source:
+
+4. **Every persona template failed its own verifier** on the confidence figure it
+   prints (`Confidence is Low (0.70, uncalibrated)`). The calibrated score is a computed
+   number and there was no `NumberFact` for it, so the verifier could not check it and
+   every narration fell back to the template-after-failure path. `numbers_for` now emits
+   the calibrated score, the composite, and each of the six signals. Numeric fidelity
+   0.667 → **1.000**.
+5. **The mock proposer cited documents that never exist**, so cite-or-drop rejected
+   every hypothesis and the kept branch — the one a reader sees — was never exercised
+   offline. The mock now cites documents from the prompt it was handed, and still leaves
+   one hypothesis uncited on purpose so the filter is exercised too.
+
+### Tier boundaries are derived from the curve, and refused when the curve says nothing
+
+`engine/tiers.py` inverts the fitted reliability curve at stated hit rates (High 90%,
+Moderate 70%, Low 50%) instead of banding at round numbers. The contract's
+`abstain_below` is a floor the curve cannot argue past downward, and has no say upward.
+
+The fitted map is then **not adopted**, because its holdout discrimination is 0.531 —
+essentially chance. An isotonic fit on a non-discriminating score collapses to a
+constant at the base rate: well calibrated by construction and useless, and the bands
+derived from it came out with High and Moderate unreachable, which would have silenced
+the system on the strength of a curve that measured nothing. `MIN_DISCRIMINATION_AUC`
+(0.55) makes non-adoption an explicit, reported decision; the contract's bands stay in
+force and the system continues to describe itself as uncalibrated, which is true.
+
+### Recorded shortfalls (see BUILD_PROGRESS.md → Known issues)
+
+| metric | target | measured | n |
+|---|---:|---:|---:|
+| expected calibration error | ≤ 0.10 | **0.1179** | 102 |
+| attribution share mean relative error | ≤ 0.20 | **0.8168** | 114 |
+| detection precision lift over chance | ≥ 1.0 | **0.9194** | 70 |
+| recall on high-detectability events | ≥ 0.70 | **0.4709** | 172 |
+
+Nothing was dropped, re-weighted or re-targeted to turn any of these into a pass. The
+precision target was *tightened* mid-phase, not loosened: an absolute 0.50 bar was
+being reported as a PASS on a corpus where 61% of scanned days lie inside some event
+window, so a coin would have scored 0.61 and "passed". Grading the lift instead turns
+that into the FAIL it always was.

@@ -147,6 +147,12 @@ class MockProvider(LLMProvider):
 
             label, reason = _by_rules(request.user)
             return json.dumps({"label": label, "reason": reason})
+        if request.call_site == "hypotheses":
+            # Cite the documents actually offered in the prompt. A mock that always
+            # cited fixed ids would have EVERY hypothesis dropped by cite-or-drop, so
+            # the kept branch — the one that reaches a reader — would never run offline,
+            # and the mandatory no-key path would silently exercise only the failure.
+            return _mock_hypotheses(request.user)
         if request.call_site == "narrate":
             try:
                 draft = str(json.loads(request.user).get("draft", "")).strip()
@@ -176,6 +182,25 @@ class MockProvider(LLMProvider):
             input_tokens=len(request.system.split()) + len(request.user.split()),
             output_tokens=MOCK_LATENCY_TOKENS,
         )
+
+
+def _mock_hypotheses(user: str) -> str:
+    """Canned claims, re-cited against whatever documents the prompt offered."""
+    template: list[dict[str, object]] = json.loads(_DEFAULT_MOCK["hypotheses"])["hypotheses"]
+    try:
+        available = [
+            str(item["doc_id"]) for item in json.loads(user).get("available_documents", [])
+        ]
+    except (json.JSONDecodeError, AttributeError, KeyError, TypeError):
+        available = []
+    rewritten: list[dict[str, object]] = []
+    for position, item in enumerate(template):
+        # The last hypothesis keeps its empty citation list on purpose: cite-or-drop
+        # has to be exercised too, and a mock where everything cites something would
+        # never demonstrate the filter doing its job.
+        cites = [available[position]] if position < len(available) and item["cites"] else []
+        rewritten.append({**item, "cites": cites})
+    return json.dumps({"hypotheses": rewritten})
 
 
 class AnthropicProvider(LLMProvider):

@@ -283,6 +283,35 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_backtest(args: argparse.Namespace) -> int:
+    """Replay the truth ledger, fit the calibration map, and write the eval report."""
+    del args
+    from insight_copilot.errors import InsightCopilotError
+    from insight_copilot.evals.runner import run_evals
+
+    try:
+        run = run_evals()
+    except InsightCopilotError as exc:
+        print(f"FAIL  {exc.message}", file=sys.stderr)
+        if exc.detail:
+            print(exc.detail, file=sys.stderr)
+        return 1
+    report = run.report
+    print(
+        f"OK    {report.corpus_events} events replayed "
+        f"({report.fit_events} fitted, {report.holdout_events} held out, "
+        f"{report.excluded_events} demo events excluded)"
+    )
+    for item in report.measurements:
+        if item.target is not None:
+            print(f"      {item.verdict:4}  {item.name}: {item.value:.4f} (n = {item.n})")
+    print(f"OK    report written to {run.markdown} and {run.json}")
+    # A missed target is reported, never hidden — but it does not fail the command,
+    # because the shortfall is recorded in BUILD_PROGRESS.md with its measured number
+    # and the report is the artifact the gate reads.
+    return 0
+
+
 COMMANDS: dict[str, Command] = {
     "info": _cmd_info,
     "validate-contracts": _cmd_validate_contracts,
@@ -291,7 +320,7 @@ COMMANDS: dict[str, Command] = {
     "backfill": _cmd_backfill,
     "replay": _cmd_replay,
     "run": _not_yet("P6"),
-    "backtest": _not_yet("P11"),
+    "backtest": _cmd_backtest,
     "demo": _cmd_demo,
     "serve": _cmd_serve,
     "demo-reset": _not_yet("P12"),

@@ -8,6 +8,9 @@ unfitted and passes the composite through unchanged — and everything downstrea
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
 
@@ -21,6 +24,7 @@ from insight_copilot.engine.confidence import (
     Tier,
     softmin,
 )
+from insight_copilot.engine.tiers import TierBoundaries, derive_boundaries
 from insight_copilot.errors import StatisticalError
 from insight_copilot.logging import get_logger
 
@@ -69,6 +73,50 @@ class IsotonicCalibrator:
             return float(score)
         return float(self._model.predict([score])[0])
 
+    def to_dict(self) -> dict[str, object]:
+        """The fitted step function as plain data.
+
+        Persisted as knots rather than as a pickled estimator: a calibration map is a
+        claim about how often this system is right, and a claim that can only be read
+        back by the exact library version that wrote it is not auditable.
+        """
+        if self._model is None:
+            raise StatisticalError("nothing to serialise; the calibrator is unfitted")
+        return {
+            "n": self._n,
+            "x": [float(value) for value in self._model.X_thresholds_],
+            "y": [float(value) for value in self._model.y_thresholds_],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> IsotonicCalibrator:
+        """Rebuild from knots. Refitting on the knots reproduces the same step map."""
+        x = np.asarray(payload["x"], dtype=np.float64)
+        y = np.asarray(payload["y"], dtype=np.float64)
+        calibrator = cls()
+        calibrator._model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip").fit(x, y)
+        calibrator._n = int(x.size)
+        return calibrator
+
+    def save(self, path: Path) -> Path:
+        """Write the map to disk beside the eval report that justified it."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.to_dict(), indent=2) + "\n")
+        return path
+
+    @classmethod
+    def load(cls, path: Path) -> IsotonicCalibrator:
+        """Read a saved map, or an unfitted calibrator when there is none.
+
+        A missing calibration file is a normal state (a clean clone before the first
+        backtest), not an error — and everything downstream already says
+        "uncalibrated" when the calibrator reports itself unfitted.
+        """
+        if not path.exists():
+            return cls()
+        payload: dict[str, object] = json.loads(path.read_text())
+        return cls.from_dict(payload)
+
 
 class ConfidenceScorer:
     """Runs the six signals, applies the hard gates, and assigns a tier."""
@@ -78,9 +126,25 @@ class ConfidenceScorer:
         *,
         signals: tuple[ConfidenceSignal, ...] = DEFAULT_SIGNALS,
         calibrator: IsotonicCalibrator | None = None,
+        boundaries: TierBoundaries | None = None,
     ) -> None:
         self._signals = signals
         self._calibrator = calibrator or IsotonicCalibrator()
+        self._boundaries = boundaries
+
+    def boundaries_for(self, contract: KPIContract) -> TierBoundaries:
+        """The tier bands in force: derived from the fitted curve, else the contract's.
+
+        Derived once per scorer and cached, because inverting the curve is a grid
+        search and the bands do not change between insights within one run.
+        """
+        if self._boundaries is None:
+            self._boundaries = (
+                derive_boundaries(self._calibrator, contract.confidence_policy)
+                if self._calibrator.fitted
+                else TierBoundaries.from_policy(contract.confidence_policy)
+            )
+        return self._boundaries
 
     def score(self, inputs: ConfidenceInputs, contract: KPIContract) -> ConfidenceResult:
         """Measure, compose, calibrate, gate, and band."""
@@ -103,6 +167,7 @@ class ConfidenceScorer:
             tier=tier,
             calibration_fitted=self._calibrator.fitted,
             hard_gate_failures=failures,
+            tier_basis=self.boundaries_for(contract).detail,
         )
 
     @staticmethod
@@ -133,16 +198,13 @@ class ConfidenceScorer:
             )
         return failures
 
-    @staticmethod
-    def _tier(calibrated: float, contract: KPIContract, failures: list[str]) -> Tier:
-        """Band the calibrated score, unless a hard gate has already decided."""
+    def _tier(self, calibrated: float, contract: KPIContract, failures: list[str]) -> Tier:
+        """Band the calibrated score, unless a hard gate has already decided.
+
+        The bands themselves come from :mod:`insight_copilot.engine.tiers` — derived
+        from the fitted reliability curve when there is one — so no threshold is
+        chosen here.
+        """
         if failures:
             return "Insufficient"
-        policy = contract.confidence_policy
-        if calibrated < policy.abstain_below:
-            return "Insufficient"
-        if calibrated < policy.hedge_below:
-            return "Low"
-        if calibrated < 0.9:
-            return "Moderate"
-        return "High"
+        return self.boundaries_for(contract).tier_for(calibrated)

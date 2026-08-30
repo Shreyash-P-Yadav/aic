@@ -1,0 +1,344 @@
+{
+  "generated_at": "2026-08-30T00:48:00.897749Z",
+  "cut_date": "2025-07-01",
+  "corpus_events": 416,
+  "fit_events": 298,
+  "holdout_events": 118,
+  "excluded_events": 5,
+  "sections": [
+    {
+      "name": "Calibration",
+      "detail": "Fitted on the events before the cut date and measured on those after it. The calibrated score is the probability that the cause the system named is the window's dominant cause.",
+      "measurements": [
+        {
+          "name": "expected calibration error",
+          "value": 0.11789489605732707,
+          "target": 0.1,
+          "direction": "max",
+          "n": 102,
+          "unit": "",
+          "detail": "count-weighted mean gap between predicted and observed hit rate"
+        },
+        {
+          "name": "Brier score",
+          "value": 0.22576004002648525,
+          "target": null,
+          "direction": "max",
+          "n": 102,
+          "unit": "",
+          "detail": "mean squared error of the probability forecast; informational"
+        },
+        {
+          "name": "discrimination (AUC)",
+          "value": 0.5313581314878892,
+          "target": null,
+          "direction": "max",
+          "n": 102,
+          "unit": "",
+          "detail": "probability a correct call outranks an incorrect one. 0.5 is none: a well-calibrated score with no discrimination is a constant at the base rate, which is honest but uninformative"
+        },
+        {
+          "name": "observed base rate",
+          "value": 0.3333333333333333,
+          "target": null,
+          "direction": "max",
+          "n": 102,
+          "unit": "%",
+          "detail": "how often the named cause was the dominant one, across the holdout"
+        }
+      ]
+    },
+    {
+      "name": "Attribution",
+      "detail": "Graded against the window's dominant cause, weighted by each concurrent event's own recorded contribution pro-rated to the overlapping days. Claims naming only a channel are ungradeable — the corpus plants no channel mechanism — and are excluded from the denominator, not scored wrong.",
+      "measurements": [
+        {
+          "name": "top-cause accuracy",
+          "value": 0.30851063829787234,
+          "target": null,
+          "direction": "max",
+          "n": 376,
+          "unit": "%",
+          "detail": "chance on 5 regions is 20%"
+        },
+        {
+          "name": "share mean relative error",
+          "value": 0.8167909114036207,
+          "target": 0.2,
+          "direction": "max",
+          "n": 114,
+          "unit": "",
+          "detail": "estimated share of the NET gap against the ledger's share of planted magnitude, on correctly named segments in windows clearing the materiality floor. The two denominators are not identical, which is stated rather than corrected for"
+        },
+        {
+          "name": "share median relative error",
+          "value": 0.34352731249321655,
+          "target": null,
+          "direction": "max",
+          "n": 114,
+          "unit": "%",
+          "detail": "the same comparison at the median. The mean is dominated by windows where segments move in opposite directions, so the NET gap in the denominator is far smaller than the gross movement the ledger's share is built from; the median shows the typical case"
+        },
+        {
+          "name": "ungradeable claims",
+          "value": 40.0,
+          "target": null,
+          "direction": "max",
+          "n": 416,
+          "unit": "count",
+          "detail": "claims naming only a dimension the ledger records no truth for"
+        }
+      ]
+    },
+    {
+      "name": "Detection",
+      "detail": "A flagged day counts as a true positive when it falls inside any ledger event window; 61% of scanned days are inside one, which is the precision a coin would achieve. An event is recalled when at least one of its days was flagged.",
+      "measurements": [
+        {
+          "name": "precision lift over chance",
+          "value": 0.9194325885011299,
+          "target": 1.0,
+          "direction": "min",
+          "n": 70,
+          "unit": "",
+          "detail": "precision divided by the share of scanned days that lie inside some event window. This, not raw precision, is the graded number: with 61% of days inside an event, a fixed precision target below that figure would be met by flagging days at random"
+        },
+        {
+          "name": "precision",
+          "value": 0.5571428571428572,
+          "target": null,
+          "direction": "max",
+          "n": 70,
+          "unit": "%",
+          "detail": "raw, against a 61% chance baseline"
+        },
+        {
+          "name": "recall on high-detectability events",
+          "value": 0.47093023255813954,
+          "target": 0.7,
+          "direction": "min",
+          "n": 172,
+          "unit": "%",
+          "detail": ""
+        },
+        {
+          "name": "recall over the whole corpus",
+          "value": 0.4879807692307692,
+          "target": null,
+          "direction": "max",
+          "n": 416,
+          "unit": "%",
+          "detail": "includes events planted below the noise floor on purpose"
+        },
+        {
+          "name": "days scanned",
+          "value": 939.0,
+          "target": null,
+          "direction": "max",
+          "n": 939,
+          "unit": "count",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "name": "Narrative",
+      "detail": "Every number in every generated sentence re-extracted and re-checked against the evidence bundle by the deterministic verifier. Citation coverage is measured over PUBLISHED claims: one the cite-or-drop filter rejected never reaches a reader.",
+      "measurements": [
+        {
+          "name": "numeric fidelity",
+          "value": 1.0,
+          "target": 1.0,
+          "direction": "min",
+          "n": 12,
+          "unit": "%",
+          "detail": ""
+        },
+        {
+          "name": "citation coverage",
+          "value": 1.0,
+          "target": 0.95,
+          "direction": "min",
+          "n": 2,
+          "unit": "%",
+          "detail": "published claims resting on a document that is in the bundle"
+        },
+        {
+          "name": "cite-or-drop rejection rate",
+          "value": 0.3333333333333333,
+          "target": null,
+          "direction": "max",
+          "n": 3,
+          "unit": "%",
+          "detail": "proposed claims the filter rejected; informational, but a rate of zero would mean the filter is never exercised"
+        },
+        {
+          "name": "narratives rendered",
+          "value": 4.0,
+          "target": null,
+          "direction": "max",
+          "n": 4,
+          "unit": "count",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "name": "Entitlements",
+      "detail": "Every contract compiled for every role; the compiled SQL itself is inspected, because that is where the guarantee lives — a mask absent from the statement cannot be put back downstream.",
+      "measurements": [
+        {
+          "name": "entitlement leakage",
+          "value": 0.0,
+          "target": 0.0,
+          "direction": "max",
+          "n": 1,
+          "unit": "count",
+          "detail": "no compiled statement omitted a declared mask or row filter"
+        },
+        {
+          "name": "policies that will not compile",
+          "value": 1.0,
+          "target": null,
+          "direction": "max",
+          "n": 1,
+          "unit": "count",
+          "detail": "intern/unit_volume: policy will not compile (fail-closed): row filter needs session binding 'user_region'"
+        }
+      ]
+    },
+    {
+      "name": "Budgets",
+      "detail": "",
+      "measurements": [
+        {
+          "name": "insight latency",
+          "value": 881.0272434110576,
+          "target": 5000.0,
+          "direction": "max",
+          "n": 1,
+          "unit": "ms",
+          "detail": ""
+        },
+        {
+          "name": "LLM cost per insight",
+          "value": 0.0,
+          "target": 0.05,
+          "direction": "max",
+          "n": 1,
+          "unit": "usd",
+          "detail": ""
+        }
+      ]
+    }
+  ],
+  "reliability": [
+    {
+      "lower": 0.0,
+      "upper": 0.1,
+      "n": 0,
+      "mean_score": 0.0,
+      "hit_rate": 0.0
+    },
+    {
+      "lower": 0.1,
+      "upper": 0.2,
+      "n": 13,
+      "mean_score": 0.11111111111111113,
+      "hit_rate": 0.23076923076923078
+    },
+    {
+      "lower": 0.2,
+      "upper": 0.30000000000000004,
+      "n": 76,
+      "mean_score": 0.2794197031039135,
+      "hit_rate": 0.35526315789473684
+    },
+    {
+      "lower": 0.30000000000000004,
+      "upper": 0.4,
+      "n": 1,
+      "mean_score": 0.39437872181076655,
+      "hit_rate": 1.0
+    },
+    {
+      "lower": 0.4,
+      "upper": 0.5,
+      "n": 10,
+      "mean_score": 0.4166666666666667,
+      "hit_rate": 0.1
+    },
+    {
+      "lower": 0.5,
+      "upper": 0.6000000000000001,
+      "n": 2,
+      "mean_score": 0.5333333333333333,
+      "hit_rate": 1.0
+    },
+    {
+      "lower": 0.6000000000000001,
+      "upper": 0.7000000000000001,
+      "n": 0,
+      "mean_score": 0.0,
+      "hit_rate": 0.0
+    },
+    {
+      "lower": 0.7000000000000001,
+      "upper": 0.8,
+      "n": 0,
+      "mean_score": 0.0,
+      "hit_rate": 0.0
+    },
+    {
+      "lower": 0.8,
+      "upper": 0.9,
+      "n": 0,
+      "mean_score": 0.0,
+      "hit_rate": 0.0
+    },
+    {
+      "lower": 0.9,
+      "upper": 1.0,
+      "n": 0,
+      "mean_score": 0.0,
+      "hit_rate": 0.0
+    }
+  ],
+  "tiers": [
+    {
+      "tier": "High",
+      "n": 0,
+      "hit_rate": 0.0,
+      "mean_score": 0.0,
+      "boundary": 0.8
+    },
+    {
+      "tier": "Moderate",
+      "n": 0,
+      "hit_rate": 0.0,
+      "mean_score": 0.0,
+      "boundary": 0.6
+    },
+    {
+      "tier": "Low",
+      "n": 13,
+      "hit_rate": 0.3076923076923077,
+      "mean_score": 0.432900927318777,
+      "boundary": 0.35
+    },
+    {
+      "tier": "Insufficient",
+      "n": 89,
+      "hit_rate": 0.33707865168539325,
+      "mean_score": 0.2548353020263132,
+      "boundary": 0.0
+    }
+  ],
+  "tier_basis": "contract bands; no fitted reliability curve yet",
+  "ranker_status": "0 labels, below the 60 floor; using rules",
+  "notes": [
+    "calibration: fitted on 274 events but NOT adopted: holdout discrimination is 0.531, below the 0.55 floor, so the map is a constant at the base rate and the bands derived from it would admit nothing",
+    "calibration map written to /home/user/aic/artifacts/calibration.json",
+    "tier boundaries fall back to the contract's own bands; the system reports itself uncalibrated rather than claiming a calibration it has not earned"
+  ]
+}
