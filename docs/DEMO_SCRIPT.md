@@ -3,10 +3,10 @@
 **Every step below was run against the live application and checked.** Anything that
 does not work is in the "Do not click" list at the end, with what to say instead.
 
-> Replaces an earlier version of this file that described things the build does not do.
-> Two were found by testing every step: the **Break a feed** control produces no visible
-> change, and the **Inject event** control returned a server error on every click. The
-> second is fixed. The first is not, and is listed as future work rather than demoed.
+> An earlier version of this file described things the build did not do. Testing every
+> step found two: **Inject event** returned a server error on every click, and **Break a
+> feed** produced no visible change. **Both are now fixed**, and the refusal path they
+> gate is the strongest thing in the demo. Everything below has been run and checked.
 
 Runs about 7 minutes.
 
@@ -54,11 +54,17 @@ the system found it."
 news, support tickets — each on its own schedule. Green means *the drop that was due has
 arrived*, measured against that feed's own contract, not a wall clock.
 
-**Point at the card:** `net_revenue`, **−41.46%**, **₹−1.00 cr**, led by
-**region=North**, tier **Moderate**, with a sparkline of the last two months.
+**Point at the cards.** Two of them:
+- `net_revenue` **−41.46%**, **₹−99.7 lakh**, led by **region=North**, tier **Moderate**
+- `unit_volume` **−40.20%**, **−21,082 units**, led by **region=North**, tier **Low**
 
-**Say:** "One insight. Not a dashboard of forty tiles — the system decided this was the
-only thing worth reporting."
+**Say:** "Two insights, not a dashboard of forty tiles. Three KPIs were scanned; the
+third moved too, and the system said nothing about it because it was below that
+contract's business floor. Silence is an output."
+
+**Worth noting if a judge is technical:** the second card reads *units*, not rupees. The
+system knows each KPI's unit — an earlier build rendered a unit count as "₹−21,082" and
+the number verifier rejected the sentence, which is how it was caught.
 
 ---
 
@@ -123,6 +129,41 @@ ones. So we refused to use it. It says *uncalibrated* because that is true. We k
 and we know the fix — it's in the report."
 
 **Click "Provenance off" → on.** Every figure gains its method, freshness and lineage.
+
+---
+
+## 3b · **The refusal** — 1 minute 30 · *the second-best moment in the demo*
+
+**Click Admin → Break a feed.** It reads `oms_orders` — the order system, which both
+KPIs on the feed depend on.
+
+**Say before clicking:** "Every control tells you what it will do before it does it.
+This one pauses the order feed and runs the simulated clock forward until it has
+actually gone stale."
+
+**Click Run.** Takes a few seconds.
+
+**Expect, verbatim in shape:**
+```
+oms_orders paused; 1 simulated day(s) later it is red while 10 of 11 feeds stay green
+(53 batches landed from the others). re-scanned: unit_volume abstained/Insufficient,
+net_revenue abstained/Insufficient
+```
+
+**Click Feed.** The `oms_orders` tile is **red**. The other ten are still green — they
+kept delivering. And both cards have changed from a published insight to an
+**abstention**: *"Not attributed — a required source…"*
+
+**Say:** "One feed went down. The system had ten other feeds still arriving and it could
+have written a confident paragraph from those. It refused. That is a designed output
+with its own type, not an error — and it is the behaviour most analytics tools cannot
+produce, because guessing always looks better in a demo."
+
+**Click a card** to show what an abstention says: what was asked, which check failed,
+and what would have to arrive for an answer to become possible.
+
+**Then click Admin → Restore a feed → Run.** The feed goes green and both insights
+return. **Say:** "And it recovers on its own, so you can watch it twice."
 
 ---
 
@@ -201,15 +242,15 @@ short and it is below.
 
 | Screen / control | What actually happens | What to say |
 |---|---|---|
-| **Admin → Break a feed** | Returns a confirmation message. **Nothing visibly changes** — the source stays green. Freshness is computed from whether a scheduled drop arrived, and pausing future drops doesn't rewrite the past. | "The refusal path is built and tested — four separate triggers, seventeen tests. It isn't yet wired to this button. That's the next piece of work." |
 | **Actions** | Empty: "No action at this confidence tier." Correct behaviour — actions are suppressed below High — but there's nothing to show. | "Actions are deliberately suppressed unless confidence is High. Since we refused to adopt the calibration, nothing reaches that bar yet." |
 | **Trust** | Says "Not yet fitted." No curve, no per-tier table. | Say it deliberately — this is your honesty story. See section 3. |
-| **Feed → Abstained filter** | Empty. Only one insight exists in the demo run. | Don't open it. |
+| **Feed → Abstained filter** | Empty *until* you break a feed. After the refusal demo it holds both cards. | Use it during section 3b, not before. |
 | **Telemetry cost** | **$0.00** — the offline mock model is free. | "Cost tracking is wired end to end; it reads zero because we're running with no paid model." |
 
-**There is only one insight in the demo.** The other three scenarios — refusal, too
-little history, too small to matter — exist and pass their tests, but are not visible as
-cards in the UI. Don't promise a judge you'll show them.
+**Two of the four scenarios are now live on screen** — the multi-cause movement
+(section 2) and the refusal (section 3b). The other two are real but quieter: "too small
+to matter" is the third KPI that produced no card, and "too little history" is enforced
+in code and covered by tests but has no visible card in this run.
 
 ---
 
@@ -217,15 +258,12 @@ cards in the UI. Don't promise a judge you'll show them.
 
 All true, all forward-looking, none claimed as present.
 
-1. **Wire the refusal path to the UI.** The engine has four abstention triggers and they
-   pass seventeen tests. Connecting them to the Break-a-feed control and getting
-   freshness to decay on the simulated clock is roughly a day.
-2. **Earn the calibration.** Our test data plants events too close together, so no single
+1. **Earn the calibration.** Our test data plants events too close together, so no single
    week has one clear cause. Regenerating it with proper spacing should make the
    confidence score meaningful — and then the Trust screen fills in and Actions unlock.
-3. **Live intake view.** Data & sources currently refreshes on load; it was designed to
+2. **Live intake view.** Data & sources currently refreshes on load; it was designed to
    stream batches as they land.
-4. **Connect a real warehouse.** Everything reads through a contract layer, so pointing
+3. **Connect a real warehouse.** Everything reads through a contract layer, so pointing
    it at real tables is configuration rather than a rebuild. Not yet done.
 
 ---
@@ -238,4 +276,5 @@ All true, all forward-looking, none claimed as present.
 | Sources all red | `demo-reset`, then `demo` again |
 | Panel spinning | Backend isn't on :8000 — check the first terminal |
 | Narrative reads like a template | Expected offline; the AI is off and the fallback is working |
+| Sources show a negative age | The controls travel the clock; harmless, and cleared by `demo-reset` |
 | Anything differs from this script | `demo-reset && demo` — state from an earlier run |

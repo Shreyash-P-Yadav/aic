@@ -57,8 +57,9 @@ Zero invented figures.**
 
 ### WORKING — the main screen
 A live status strip showing all eleven data feeds and whether each arrived on time. Below
-it, the insights the system decided were worth reporting. Each card shows the movement,
-the money impact, which segment led it, and a confidence badge.
+it, the insights the system decided were worth reporting — typically two cards, each with
+the movement, the impact **in that KPI's own unit** (rupees for revenue, a count for unit
+volume), which segment led it, a confidence badge, and a two-month sparkline.
 *(screenshot: feed)*
 
 ### WORKING — the detail screen: the flagship story
@@ -75,20 +76,32 @@ The system correctly finds North, worth ₹-1.00 crore, with 96% stability. It s
 
 *(screenshot: insight detail)*
 
-### BUILT AND TESTED, NOT YET ON SCREEN — it refuses to answer when it can't
-The system has four separate triggers for declining to answer — a stale data feed, two
-sources that disagree, no supporting evidence, or a signal too weak to trust. All four
-are built and covered by seventeen automated tests.
+### WORKING — it refuses to answer when it can't
+**This is now demonstrable live, and it is the strongest thing in the demo.**
 
-**Be careful how this is presented.** The refusal logic works, but it is not yet wired
-to a button in the demo, so it cannot be shown happening live. Say "built and tested",
-show the test result if asked, and put "connect it to the interface" in the roadmap.
-*Estimated: one day of work.*
+On the Admin screen, "Break a feed" pauses the order system and runs the simulated clock
+forward until that feed has genuinely gone stale. What a viewer sees:
 
-### BUILT AND TESTED, NOT YET ON SCREEN — it stays quiet when it should
-A new product with only 18 days of history is not enough to judge, so the system says
-nothing. A movement that is real but too small to matter gets silence. Both rules are
-implemented and tested; neither appears as a visible card in the current demo.
+- The `oms_orders` tile turns **red**. The other **ten feeds stay green** — they kept
+  delivering normally.
+- Both insights change from a published explanation to an **abstention**: *"Not
+  attributed — a required source…"*
+- "Restore a feed" brings it back, and the insights return. So it can be shown twice.
+
+**Why this matters:** the system still had ten working feeds. It could have written a
+confident paragraph from those. It refused. Most analytics tools cannot do this, because
+guessing always looks better in a demo than declining.
+
+The system has four separate triggers for declining — a stale required feed, two sources
+that disagree, no supporting evidence, or a signal too weak to trust — all covered by
+seventeen automated tests.
+
+### WORKING — it stays quiet when it should
+Three KPIs are scanned each run. Typically two produce a card and the third produces
+nothing, because its movement — while real and statistically clean — sits below that
+contract's business floor. Silence is an output, and the run log says which KPI was
+skipped and why. A "too little history" rule is also enforced in code and tested,
+though it has no visible card in the current demo data.
 
 ### WORKING — a live control that re-runs the world
 On the Admin screen, "Inject event" replays the simulated world through a planted
@@ -124,8 +137,8 @@ statistics were never dependent on the AI — this proves it.
 | 2 | Business definitions held as contracts | Yes — 6 KPI + 11 source contracts |
 | 3 | 2+ personas with different narratives | 4 personas |
 | 4 | A movement with several causes | Scenario A |
-| 5 | A refusal to answer | Built + 17 tests; **not yet visible in the UI** |
-| 6 | A too-little-history case | Built + tested; **not yet visible in the UI** |
+| 5 | A refusal to answer | **Live on screen** — break a feed, both insights abstain |
+| 6 | A too-little-history case | Enforced in code + tested; no visible card in this data |
 | 7 | Role-based data restriction | 5 roles |
 | 8 | Evidence: freshness, method, contribution, confidence, lineage | On every insight |
 | 9 | Clear split of AI vs computed | The Provenance toggle |
@@ -165,13 +178,9 @@ and well-known problem in the industry. Our method gets **1.58× closer to the t
 answer than the naive approach**, but not to the exact figure. We report the uncertainty
 rather than hiding it.
 
-**The refusal path is not connected to the interface.** The logic is built and tested,
-but the "Break a feed" button reports success without producing a visible change. This
-is the single most important gap, because refusing to answer is one of our strongest
-claims. *Roughly one day of work.*
-
 **Three screens are incomplete:**
-- **Admin** has 1 working control of 4 planned, and no clock control
+- **Admin** has 3 working controls (inject event, break feed, restore feed) and no
+  clock control
 - **Data & Sources** was meant to stream arrivals live; it currently refreshes on load
 - **Trust** correctly says "not yet fitted" and therefore shows no chart
 - **Actions** is empty by design — actions are suppressed below High confidence, and
@@ -210,8 +219,7 @@ accuracy figures at all instead of just showing a demo that looks convincing.
 - Do **not** claim the confidence score is calibrated. Claim the opposite, and frame it
   as evidence of honesty. It is our most defensible story.
 - Suggested screenshot order: feed → insight detail → chart → confidence panel →
-  role switch → audit → telemetry. **There is no abstention screenshot** — that path is
-  tested but not visible in the interface yet.
-- Do not write "four scenarios demonstrated". One is demonstrated live; the other three
-  are built and tested but not shown on screen. `docs/DEMO_SCRIPT.md` has the exact
-  wording for each.
+  **abstention (after breaking a feed)** → role switch → audit → telemetry.
+- Two of the four scenarios are live on screen: the multi-cause movement and the
+  refusal. Say "two demonstrated live, two enforced in code" rather than "four
+  demonstrated". `docs/DEMO_SCRIPT.md` has the exact wording.
