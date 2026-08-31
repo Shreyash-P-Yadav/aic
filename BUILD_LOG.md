@@ -1564,3 +1564,172 @@ Populating rungs 2 and 3 also moved the flagship insight's tier from **Low to Mo
 because `c3_statistical` is no longer measuring an absent regression. `docs/DEMO_SCRIPT.md`
 was updated to match — the expected tier chip, the expected startup line, and a click
 instruction for each rung.
+
+---
+
+## Post-P12 hardening pass
+
+Not a phase. A review pass over things earlier phases left behind, every one of them
+found by reading the code or driving the running app rather than by a failing gate —
+the gates were already green. Nine findings, all fixed; the two that matter most are
+below in full, and the rest are tabulated in `BUILD_PROGRESS.md`.
+
+### The Actions screen was empty for a reason nobody could see
+
+`RunInputs.observed_metrics` was never populated, so every action precondition came back
+*unchecked*, and the selector treats unchecked exactly as it treats failed. Every action
+was therefore withheld, and the screen said "No action at this confidence tier" — which
+named the wrong cause. The scan now supplies the metrics the warehouse can genuinely
+answer and, deliberately, no more: `days_cover` and `cross_serve_headroom_pct` have no
+mart in this build and are left absent rather than defaulted, because a plausible zero
+would convert "we could not check this" into "this passed".
+
+That change made an action appear — and the action was wrong in two separate ways, both
+of which were real defects the empty screen had been hiding.
+
+### 1. A recommendation to lose money
+
+The proposed action was "Run a targeted promotion in the affected segment", with an
+expected impact of **−₹1.18 crore**. The arithmetic was right. The estimated
+`price_index` elasticity of net revenue on this data is **+0.93** — inelastic demand —
+so cutting price by 8% is priced as a loss, not a recovery. The selector had no sign
+check, so it proposed it anyway.
+
+An action whose own arithmetic makes the movement worse is not a recommendation. The
+selector now requires that an action move the KPI back towards its baseline, and the
+refusal is *reported* rather than only logged: `ActionSelection` carries `chosen` and
+`withheld`, the bundle exposes `actions_withheld`, and the screen renders a "considered
+and not proposed" list with each reason. An empty action list and a list of three
+rejected candidates look identical on screen otherwise, and only one of them is a
+decision.
+
+This is the first law doing its job. The catalog entry says a promotion recovers volume;
+the regression says otherwise on this data; the regression wins.
+
+### 2. Three numbers in the recommendation sentence that nothing could verify
+
+With an action finally being proposed, the eval caught the consequence:
+
+```
+| numeric fidelity | 79.3% | 100.0% | 58 | FAIL |
+```
+
+The recommendation sentence quotes three figures — the central impact and both ends of
+its interval — and the bundle carried **no `NumberFact` for any of them**. The verifier
+rejected the faithful sentence, all four personas fell back to the template they had
+already rendered, and the fidelity metric fell from 100% (n = 34) to 79.3% (n = 58).
+
+The unit fixture hand-writes `action_impact`, `action_impact_low` and
+`action_impact_high`, which is exactly why the gap survived every earlier test: the
+fixture asserted a bundle shape the pipeline never actually produced. `action_numbers()`
+now emits those facts from the actions the selector really returned, keyed by action id
+so two proposals cannot collide, and the new test asserts against the selector's output
+rather than against a fixture.
+
+### An entitlement policy that could never compile
+
+`unit_volume` granted the `intern` role `rows: "region = :user_region"`. The intern role
+carries no bindings, so the compiler failed closed on it every time: nothing leaked, but
+the role was denied **by accident rather than by decision**, and nobody would find out
+until someone ran that exact query. The eval had been reporting it as
+"policies that will not compile: 1" — separately from leakage, so that widening the
+policy could not look like a fix.
+
+The grant now matches its sibling operational contract (`order_fill_rate`): `rows: all`.
+More usefully, `check_referential_integrity` now rejects *any* row filter that binds a
+value its role does not supply, so `make validate-contracts` catches the whole class at
+authoring time. A contract that means "this role sees nothing" says `deny: true`.
+
+### The rest
+
+A fourth demo control (advance the clock, forward only, 1–30 days, bounded at both the
+schema and the control); actions read from every published insight rather than only the
+first, which had made the screen look empty whenever the priority ranker put a Low-tier
+movement on top; an Ask answer now links to the insight it came from; data & sources
+re-polls every ten seconds and says on screen that it is polling rather than being
+pushed to; an `UNKNOWN` dimension member is labelled `unmapped` with an explanation
+rather than shown bare, where it reads like a broken join; `landing.wrote` logs a period
+count and span instead of nine hundred period strings per batch; and three files over
+the 400-line limit were split.
+
+### Verification
+
+Backend suite, whole thing:
+
+```
+........................................................................ [ 23%]
+........................................................................ [ 46%]
+........................................................................ [ 69%]
+........................................................................ [ 92%]
+......................                                                   [100%]
+EXIT=0
+```
+
+310 tests. `ruff check`, `ruff format --check`, `mypy --strict` (191 source files),
+`tsc -b`, `eslint --max-warnings 0`, `prettier --check` and 9 vitest all clean.
+`make validate-contracts` passes with the corrected `unit_volume` policy.
+
+Then `demo-reset`, a full rebuild from a wiped warehouse, and `make backtest` — because
+the first backtest after these changes ran against a warehouse whose clock the *new*
+control had already advanced three days, and a report measured on a world you moved is
+not a report. On the clean rebuild:
+
+```
+| numeric fidelity                | 100.0% | 100.0% |  46 | PASS |
+| policies that will not compile  |      0 |      — |   1 |  —   |
+| entitlement leakage             |      0 |      0 |   1 | PASS |
+```
+
+Numeric fidelity is back to 100%, now across 8 narratives rather than 4. Note what that
+does *not* prove: this run proposes no actions, so no recommendation sentence is
+rendered and the new impact facts are never exercised by the eval. They are covered by a
+test instead, and that is worth saying rather than letting a green metric imply it.
+
+The four standing failures are unchanged, and their measured values moved only at the
+noise level:
+
+```
+| expected calibration error          | 0.114 | 0.100 | 102 | FAIL |
+| share mean relative error           | 0.817 | 0.200 | 114 | FAIL |
+| precision lift over chance          | 0.925 | 1.000 |  71 | FAIL |
+| recall on high-detectability events | 47.1% | 70.0% | 172 | FAIL |
+```
+
+An intermediate run had shown ECE at 0.093 — a PASS. It was not reported as one: that
+run was the contaminated one, and a metric that crosses its target because you moved the
+world is not a metric that improved.
+
+Seven Playwright E2E green against the live server, screenshots recaptured. The first
+recapture caught a real trap: the demo serves `frontend/dist`, so the screenshots showed
+the *previous* build and the Actions screen still read "No action at this confidence
+tier". A screenshot of a stale bundle is a false record of the run, which is exactly the
+kind of thing this log exists to not do. Rebuilt and recaptured.
+
+Live, on the clean rebuild, all four controls exercised over HTTP:
+
+```
+advance-clock 3   -> clock advanced 3 simulated day(s) to 2026-04-01; 164 batches
+                     landed and 11 of 11 feeds are green. re-scanned: unit_volume
+                     published/Low, net_revenue published/Moderate
+advance-clock 0   -> HTTP 422   advance-clock 365 -> HTTP 422
+break oms_orders  -> paused; 1 simulated day(s) later it is red while 10 of 11 feeds
+                     stay green. re-scanned: unit_volume abstained/Insufficient,
+                     net_revenue abstained/Insufficient
+restore           -> resumed; 1 simulated day(s) later it is green again.
+                     re-scanned: unit_volume published/Low, net_revenue published/Moderate
+```
+
+And the Actions screen, which is the point of most of the above:
+
+```
+unit_volume   published Low      -> proposed 0
+net_revenue   published Moderate -> proposed 0
+  - 'Reverse or phase the price increase on the affected SKUs':
+        failed price_index above 1.02 (segment)
+  - 'Run a targeted promotion in the affected segment':
+        priced with the estimated price_index elasticity of +0.93, it would push the
+        KPI the wrong way — further from its baseline rather than back towards it
+```
+
+Two candidates, two different kinds of refusal, both on screen. That is a better screen
+than the one action it replaced, and it is the only one of the two that is true.
