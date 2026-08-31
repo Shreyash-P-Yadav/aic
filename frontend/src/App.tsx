@@ -12,8 +12,10 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { InsightDetail } from '@/screens/InsightDetail';
 import { InsightFeed } from '@/screens/InsightFeed';
-import { Actions, Admin, Ask } from '@/screens/Interactive';
-import { Audit, DataSources, Telemetry, TrustCalibration } from '@/screens/Simple';
+import { Admin } from '@/screens/Admin';
+import { Actions, Ask } from '@/screens/Interactive';
+import { Audit, DataSources, Telemetry } from '@/screens/Simple';
+import { TrustCalibration } from '@/screens/Trust';
 
 const client = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, staleTime: 15_000 } },

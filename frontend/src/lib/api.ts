@@ -104,8 +104,22 @@ export const api = {
   audit: (signal?: AbortSignal) => request<AuditEntry[]>('/api/audit', { signal }),
   evals: (signal?: AbortSignal) => request<EvalReport>('/api/evals', { signal }),
   demo: (control: 'inject-event' | 'break-feed' | 'restore-feed', target: string) =>
-    request<{ control: string; detail: string; sim_time: string }>(`/api/demo/${control}`, {
+    request<DemoControlResult>(`/api/demo/${control}`, {
       method: 'POST',
       body: JSON.stringify({ target }),
     }),
+  // The clock control takes a count rather than an id, so it does not fit `demo`'s
+  // shape. Kept separate rather than widened into a union body: a control whose
+  // argument means something different deserves a different call.
+  advanceClock: (days: number) =>
+    request<DemoControlResult>('/api/demo/advance-clock', {
+      method: 'POST',
+      body: JSON.stringify({ days }),
+    }),
 };
+
+export interface DemoControlResult {
+  control: string;
+  detail: string;
+  sim_time: string;
+}

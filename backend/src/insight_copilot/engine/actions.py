@@ -185,6 +185,36 @@ def propagate_impact(
     return ImpactInterval(central=evaluate(elasticity), low=ends[0], high=ends[1])
 
 
+@dataclass(frozen=True)
+class ActionSelection:
+    """What the selector proposed, and what it refused to propose and why.
+
+    The refusals are carried rather than only logged because an empty action list is
+    ambiguous on screen: "nothing to do" and "three things were considered and every one
+    was ruled out" look identical, and only the second is a decision. A reader who
+    cannot tell them apart has to guess whether the system thought about it.
+    """
+
+    chosen: list[RecommendedAction]
+    withheld: list[str]
+
+
+def _withheld_reason(title: str, failed: list[str], unchecked: list[str]) -> str:
+    """Why one action was not proposed, distinguishing failed from unevaluable.
+
+    The distinction is the whole point. A failed precondition is an answer: the data was
+    consulted and it said no. An unevaluable one is the absence of an answer, and it is
+    treated the same way on purpose — but a reader deserves to know which happened,
+    because only one of them is fixed by building a mart.
+    """
+    parts: list[str] = []
+    if failed:
+        parts.append(f"failed {', '.join(failed)}")
+    if unchecked:
+        parts.append(f"could not check {', '.join(unchecked)} (no mart provides it)")
+    return f"{title!r}: {'; '.join(parts)}"
+
+
 class ActionSelector:
     """Chooses which governed actions to propose, and prices them."""
 
@@ -202,15 +232,27 @@ class ActionSelector:
         elasticity_interval: tuple[float, float],
         lever_change: float,
         observed: dict[str, float],
+        gap: float,
         today: dt.date,
-    ) -> list[RecommendedAction]:
-        """Every admissible action for this driver, or none at Low/Insufficient."""
+    ) -> ActionSelection:
+        """Every admissible action for this driver, or none at Low/Insufficient.
+
+        ``gap`` is the movement being answered — observed minus expected — and it sets
+        the direction an action has to push. See :func:`_closes_the_gap`.
+        """
         if confidence.tier in SUPPRESSED_TIERS:
             logger.info(
                 "actions.suppressed", tier=confidence.tier, kpi=contract.kpi.id, driver=driver_id
             )
-            return []
+            return ActionSelection(
+                chosen=[],
+                withheld=[
+                    f"every action is withheld at {confidence.tier} confidence: a "
+                    f"recommendation is the strongest thing this system can say"
+                ],
+            )
         chosen: list[RecommendedAction] = []
+        withheld: list[str] = []
         for spec in self._catalog.for_driver(driver_id):
             met, failed, unchecked = _evaluate(spec.preconditions, observed)
             if failed or unchecked:
@@ -223,18 +265,34 @@ class ActionSelector:
                     failed=failed,
                     unchecked=unchecked,
                 )
+                withheld.append(_withheld_reason(spec.title, failed, unchecked))
+                continue
+            impact = propagate_impact(
+                baseline_value=baseline_value,
+                elasticity=elasticity,
+                elasticity_interval=elasticity_interval,
+                lever_change=lever_change,
+                effect_fraction=spec.effect_fraction,
+            )
+            if not _closes_the_gap(impact.central, gap):
+                logger.info(
+                    "actions.wrong_direction",
+                    action=spec.id,
+                    impact=impact.central,
+                    gap=gap,
+                    elasticity=elasticity,
+                )
+                withheld.append(
+                    f"{spec.title!r}: priced with the estimated {driver_id} elasticity of "
+                    f"{elasticity:+.2f}, it would push the KPI the wrong way — further from "
+                    f"its baseline rather than back towards it"
+                )
                 continue
             chosen.append(
                 RecommendedAction(
                     spec=spec,
                     driver_id=driver_id,
-                    expected_impact=propagate_impact(
-                        baseline_value=baseline_value,
-                        elasticity=elasticity,
-                        elasticity_interval=elasticity_interval,
-                        lever_change=lever_change,
-                        effect_fraction=spec.effect_fraction,
-                    ),
+                    expected_impact=impact,
                     owner_role=spec.owner_role,
                     needs_approval=abs(baseline_value * lever_change * spec.effect_fraction)
                     >= spec.approval_threshold_inr,
@@ -246,8 +304,14 @@ class ActionSelector:
                 )
             )
         chosen.sort(key=lambda item: abs(item.expected_impact.central), reverse=True)
-        logger.info("actions.selected", kpi=contract.kpi.id, driver=driver_id, n=len(chosen))
-        return chosen
+        logger.info(
+            "actions.selected",
+            kpi=contract.kpi.id,
+            driver=driver_id,
+            n=len(chosen),
+            withheld=len(withheld),
+        )
+        return ActionSelection(chosen=chosen, withheld=withheld)
 
 
 def _evaluate(
@@ -266,3 +330,22 @@ def _evaluate(
         else:
             failed.append(condition.detail)
     return met, failed, unchecked
+
+
+def _closes_the_gap(impact: float, gap: float) -> bool:
+    """Would this action move the KPI back towards its baseline, or further from it?
+
+    An action is priced with the elasticity the regression actually estimated, and that
+    estimate is allowed to disagree with the intuition behind the catalog entry. On this
+    build it does: `price_index` against net revenue comes out at **+0.93**, so cutting
+    price by 8% is priced as a *loss* of Rs 1.18 crore rather than a recovery — inelastic
+    demand, as estimated. Recommending it anyway would be the model overruling its own
+    arithmetic, which is the one thing this system is built not to do.
+
+    So the sign is the gate: an action must push the KPI in the direction that closes the
+    movement being answered. A zero gap has no direction to close and admits nothing —
+    there is no movement to correct.
+    """
+    if gap == 0.0 or impact == 0.0:
+        return False
+    return (impact > 0.0) == (gap < 0.0)

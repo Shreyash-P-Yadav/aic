@@ -214,6 +214,12 @@ class InsightEvidenceBundle(StrictModel):
 
     confidence: ConfidenceFact
     actions: list[ActionFact] = Field(default_factory=list)
+    actions_withheld: list[str] = Field(default_factory=list)
+    """Governed actions that were considered and ruled out, each with its reason.
+
+    Carried alongside the proposals because an empty action list is ambiguous: "nothing
+    applies here" and "every candidate was evaluated and rejected" look the same on
+    screen, and only one of them is a decision the system took."""
     freshness: list[FreshnessFact] = Field(default_factory=list)
     lineage: list[LineageStep] = Field(default_factory=list)
 

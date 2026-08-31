@@ -10,6 +10,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
+import { isUnmapped, UNMAPPED_NOTE } from '@/lib/segments';
+
 import { api, ApiError } from '@/lib/api';
 import { Sparkline } from '@/components/Sparkline';
 import { pct, quantity, when } from '@/lib/format';
@@ -125,8 +127,9 @@ function InsightCard({ insight }: { insight: InsightSummary }) {
         {insight.top_segment ? (
           <>
             <span aria-hidden>·</span>
-            <span>
+            <span title={isUnmapped(insight.top_segment) ? UNMAPPED_NOTE : undefined}>
               led by <span className="text-ink-secondary">{insight.top_segment}</span>
+              {isUnmapped(insight.top_segment) ? ' (unmapped rows)' : ''}
             </span>
           </>
         ) : null}

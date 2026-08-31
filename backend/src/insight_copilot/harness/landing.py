@@ -118,12 +118,17 @@ class LandingZone:
         manifest.write(manifest_path)
         self._remember(manifest)
 
+        # The periods are SUMMARISED, not listed. A bulk backfill drops one batch
+        # covering nine hundred days, and logging all of them buried every other line
+        # in the run — including the errors someone would be reading the log to find.
+        # The full list is in the batch manifest, which is where an auditor looks.
         logger.info(
             "landing.wrote",
             source_id=contract.source_id,
             batch_id=batch_id,
             rows=len(frame),
-            periods=list(arrival.periods),
+            periods=len(arrival.periods),
+            covers=period_span(arrival.periods),
             restatement=arrival.is_restatement,
         )
         return LandedBatch(manifest=manifest, data_path=data_path, manifest_path=manifest_path)
@@ -230,3 +235,17 @@ def _frame_digest(frame: pd.DataFrame) -> str:
 def _file_digest(path: Path) -> str:
     """SHA-256 over the delivered bytes — the manifest's integrity claim."""
     return sha256(path.read_bytes()).hexdigest()
+
+
+def period_span(periods: tuple[str, ...]) -> str:
+    """``2023-09-01..2026-02-26`` — what a batch covers, in one field.
+
+    Periods arrive newest-first, so the span is read off both ends rather than sorted:
+    sorting would impose an ordering the caller did not promise and cost a copy of a
+    thousand-element tuple on every landing.
+    """
+    if not periods:
+        return "none"
+    if len(periods) == 1:
+        return periods[0]
+    return f"{periods[-1]}..{periods[0]}"

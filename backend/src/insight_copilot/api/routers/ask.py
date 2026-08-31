@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 
 from insight_copilot.api.deps import get_state
 from insight_copilot.api.schemas import (
+    AdvanceClockRequest,
     AskRequest,
     AskResponse,
     DemoControlRequest,
@@ -92,6 +93,21 @@ async def restore_feed(
     do between two questions.
     """
     outcome = state.harness_controls.restore_feed(payload.target)  # type: ignore[attr-defined]
+    return _describe(outcome, _rescan(state))
+
+
+@router.post("/api/demo/advance-clock", response_model=DemoControlResponse)
+async def advance_clock(
+    payload: AdvanceClockRequest, state: AppState = Depends(get_state)
+) -> DemoControlResponse:
+    """Run the simulated clock forward, then re-scan.
+
+    The other three controls change one thing about the world. This one changes the
+    date, which is the input every freshness verdict and every baseline window is
+    measured against — so it is the control that shows the system reacting to time
+    passing rather than to a button being pressed.
+    """
+    outcome = state.harness_controls.advance_clock(payload.days)  # type: ignore[attr-defined]
     return _describe(outcome, _rescan(state))
 
 

@@ -20,6 +20,8 @@ import pandas as pd
 import pytest
 
 from insight_copilot.datagen.defects.schema import SchemaDrift, SilentUnitChange
+from insight_copilot.errors import IngestionError
+from insight_copilot.harness.landing import period_span
 from insight_copilot.harness.periods import week_label
 from insight_copilot.harness.scheduler import ArrivalScheduler
 from insight_copilot.ingest.gold import REVENUE_MART
@@ -364,3 +366,50 @@ def test_age_never_reads_negative_after_the_clock_travels_backwards() -> None:
     future = now + dt.timedelta(hours=28)
     assert max((now - future).total_seconds() / 3600.0, 0.0) == 0.0
     assert FreshnessTracker is not None
+
+
+# ------------------------------------------------------------ the clock control --
+def test_advancing_the_clock_lands_the_batches_due_in_that_window(
+    replayed: dict[str, object],
+) -> None:
+    """The manual clock control is a replay, not a date relabel.
+
+    The distinction matters because every freshness verdict and every baseline window is
+    measured against the clock. A control that moved the date without landing the drops
+    due in between would make every feed look stale and every number look wrong, which
+    is precisely the failure mode a presenter would discover on stage.
+    """
+    harness = replayed["harness"]
+    controls = replayed["controls"]
+    before = harness.clock.now
+
+    outcome = controls.advance_clock(3)
+
+    assert harness.clock.now.date() == (before + dt.timedelta(days=3)).date()
+    assert outcome.control == "advance_clock"
+    assert "3 simulated day(s)" in outcome.detail
+    # Three days covers at least one drop of every daily feed, so the window cannot be
+    # empty unless nothing was scheduled at all.
+    assert any(item.state == "green" for item in outcome.freshness)
+
+
+def test_the_clock_control_refuses_a_move_it_was_not_designed_for(
+    replayed: dict[str, object],
+) -> None:
+    """Zero is a no-op dressed as a control; a year is a replay nobody asked for."""
+    controls = replayed["controls"]
+    for days in (0, -1, 365):
+        with pytest.raises(IngestionError):
+            controls.advance_clock(days)
+
+
+def test_a_backfill_batch_logs_itsperiod_span_not_every_period() -> None:
+    """A bulk drop covers nine hundred days; the log line must stay one line long.
+
+    Logging the full list buried every other line in a backfill run, including the
+    errors someone reads a log to find. The manifest still records every period — this
+    is about what a human scanning stdout can use.
+    """
+    assert period_span(()) == "none"
+    assert period_span(("static",)) == "static"
+    assert period_span(("2026-02-26", "2026-02-25", "2023-09-01")) == "2023-09-01..2026-02-26"

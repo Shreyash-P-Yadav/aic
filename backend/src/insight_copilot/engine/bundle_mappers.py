@@ -8,6 +8,7 @@ is rather than as three hundred lines of field assignment.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from insight_copilot.contracts.models import KPIContract
@@ -178,6 +179,45 @@ def numbers_for(inputs: RunInputs, confidence: ConfidenceResult | None = None) -
                     ),
                 ]
             )
+    return facts
+
+
+def action_numbers(actions: Sequence[RecommendedAction], unit: str) -> list[NumberFact]:
+    """Narratable facts for each proposed action's priced impact.
+
+    Without these the recommendation sentence quotes three figures — the central impact
+    and both ends of its interval — that the verifier cannot match to anything, so a
+    faithful sentence is rejected as unsupported and the narrator falls back to the very
+    template it was already rendering. Every number a sentence may contain has to exist
+    as a fact; an action's price is no exception.
+
+    Keyed by action id so two proposals cannot collide on ``action_impact``.
+    """
+    facts: list[NumberFact] = []
+    for action in actions:
+        impact = action.expected_impact
+        facts.extend(
+            [
+                NumberFact(
+                    key=f"action_{action.spec.id}_impact",
+                    value=impact.central,
+                    unit=unit,
+                    method="baseline x elasticity x lever change x effect fraction",
+                ),
+                NumberFact(
+                    key=f"action_{action.spec.id}_impact_low",
+                    value=impact.low,
+                    unit=unit,
+                    method="the same arithmetic at the low end of the elasticity interval",
+                ),
+                NumberFact(
+                    key=f"action_{action.spec.id}_impact_high",
+                    value=impact.high,
+                    unit=unit,
+                    method="the same arithmetic at the high end of the elasticity interval",
+                ),
+            ]
+        )
     return facts
 
 

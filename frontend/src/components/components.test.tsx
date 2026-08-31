@@ -13,7 +13,9 @@ import { describe, expect, it } from 'vitest';
 import { ConfidencePanel } from './ConfidencePanel';
 import { DriverChart } from './DriverChart';
 import { FreshnessBadge, TierChip } from './primitives';
+
 import { Waterfall } from './Waterfall';
+import { isUnmapped } from '@/lib/segments';
 import type { ConfidenceFact, DriverFact } from '@/lib/types';
 
 const CONFIDENCE: ConfidenceFact = {
@@ -125,5 +127,18 @@ describe('DriverChart', () => {
     expect(screen.getByText('-1.630')).toBeInTheDocument();
     expect(screen.getByText(/grouped/)).toBeInTheDocument();
     expect(screen.getByText(/crossing the zero line/)).toBeInTheDocument();
+  });
+});
+
+describe('unmapped segment detection', () => {
+  it('flags the UNKNOWN member of any dimension', () => {
+    expect(isUnmapped('category=UNKNOWN')).toBe(true);
+    expect(isUnmapped('region=North x category=UNKNOWN')).toBe(true);
+  });
+
+  it('does not flag a real member that merely contains the word', () => {
+    expect(isUnmapped('region=North')).toBe(false);
+    expect(isUnmapped('channel=UNKNOWN_CHANNEL')).toBe(false);
+    expect(isUnmapped('category=Unknown Brands Ltd')).toBe(false);
   });
 });

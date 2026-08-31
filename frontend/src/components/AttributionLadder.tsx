@@ -10,6 +10,7 @@
 import { useState } from 'react';
 
 import { coefficient, day, inr, share } from '@/lib/format';
+import { isUnmapped, UNMAPPED_NOTE } from '@/lib/segments';
 import type { InsightBundle } from '@/lib/types';
 import { ConfidencePanel } from './ConfidencePanel';
 import { DriverChart } from './DriverChart';
@@ -70,8 +71,18 @@ function WhereRung({ bundle }: { bundle: InsightBundle }) {
     <div className="space-y-2">
       {bundle.segments.map((segment) => (
         <div key={segment.label} className="grid grid-cols-[10rem_1fr_7rem] items-center gap-3">
-          <span className="truncate text-xs text-ink-secondary" title={segment.label}>
+          <span
+            className="truncate text-xs text-ink-secondary"
+            title={
+              isUnmapped(segment.label) ? `${segment.label} — ${UNMAPPED_NOTE}` : segment.label
+            }
+          >
             {segment.label}
+            {isUnmapped(segment.label) ? (
+              <span className="ml-1 rounded border border-hairline-border px-1 text-[10px] text-ink-muted">
+                unmapped
+              </span>
+            ) : null}
           </span>
           <span className="h-3 rounded" style={{ backgroundColor: 'var(--hairline-grid)' }}>
             <span

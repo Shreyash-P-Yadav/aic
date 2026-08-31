@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from insight_copilot.contracts.models import KPIContract
-from insight_copilot.engine.actions import ActionCatalog, ActionSelector, RecommendedAction
+from insight_copilot.engine.actions import ActionCatalog, ActionSelection, ActionSelector
 from insight_copilot.engine.attribute_where import WhereResult
 from insight_copilot.engine.attribute_why import WhyResult
 from insight_copilot.engine.bundle import (
@@ -24,6 +24,7 @@ from insight_copilot.engine.bundle import (
 )
 from insight_copilot.engine.bundle_mappers import (
     action_fact,
+    action_numbers,
     confidence_fact,
     drivers_for,
     eta_for,
@@ -160,7 +161,8 @@ class InsightEngine:
             delta_pct=detection.delta_pct,
             detection_method=detection.method,
             p_value=detection.p_value,
-            numbers=numbers_for(inputs, confidence),
+            numbers=numbers_for(inputs, confidence)
+            + action_numbers(actions.chosen, inputs.contract.definition.unit),
             segments=segments_for(inputs.where),
             price_effect=inputs.price_effect,
             pvm_reference=inputs.pvm_reference,
@@ -177,7 +179,8 @@ class InsightEngine:
                 inputs.evidence.rejected_by_timing if inputs.evidence else []
             ),
             confidence=fact,
-            actions=[action_fact(item) for item in actions],
+            actions=[action_fact(item) for item in actions.chosen],
+            actions_withheld=actions.withheld,
             freshness=freshness_for(inputs.freshness),
             lineage=lineage_for(inputs.contract),
         )
@@ -186,19 +189,20 @@ class InsightEngine:
             kpi=bundle.kpi_id,
             tier=fact.tier,
             actions=len(bundle.actions),
+            actions_withheld=len(bundle.actions_withheld),
             delta_pct=bundle.delta_pct,
         )
         return bundle
 
     def _actions(
         self, inputs: RunInputs, confidence: ConfidenceResult, today: dt.date
-    ) -> list[RecommendedAction]:
-        """Governed actions for the leading driver, or none when the tier forbids them."""
+    ) -> ActionSelection:
+        """Governed actions for the leading driver, with what was ruled out and why."""
         if inputs.why is None or not inputs.contract.actions_ref:
-            return []
+            return ActionSelection(chosen=[], withheld=[])
         leading = max(inputs.why.estimates, key=lambda item: abs(item.coefficient), default=None)
         if leading is None:
-            return []
+            return ActionSelection(chosen=[], withheld=[])
         catalog = ActionCatalog.load(inputs.contract.actions_ref)
         return ActionSelector(catalog).select(
             contract=inputs.contract,
@@ -209,6 +213,7 @@ class InsightEngine:
             elasticity_interval=leading.confidence_interval,
             lever_change=inputs.lever_change or 0.01,
             observed=inputs.observed_metrics,
+            gap=inputs.detection.delta,
             today=today,
         )
 

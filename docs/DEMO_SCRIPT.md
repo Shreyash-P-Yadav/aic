@@ -241,17 +241,18 @@ shows wins isn't a report."
 
 ---
 
-# Do not click these
+# The rest of the app, and what to say about it
 
-Each of these is either empty or does nothing. If a judge asks, the honest answer is
-short and it is below.
+None of these is on the main path, and none of them is broken. If a judge clicks one or
+asks about it, the honest answer is short and it is below.
 
 | Screen / control | What actually happens | What to say |
 |---|---|---|
-| **Actions** | Empty: "No action at this confidence tier." Correct behaviour — actions are suppressed below High — but there's nothing to show. | "Actions are deliberately suppressed unless confidence is High. Since we refused to adopt the calibration, nothing reaches that bar yet." |
-| **Trust** | Now shows the full backtest: 25 metrics with verdicts, the reliability curve, the per-tier table. Four metrics read FAIL. | **Show this screen.** The FAILs are the honesty story — see section 3 and the wording there. |
+| **Trust** | Shows the full backtest: 25 metrics with verdicts, the reliability curve, the per-tier table. Four metrics read FAIL. | **Show this screen.** The FAILs are the honesty story — see section 3 and the wording there. |
 | **Feed → Abstained filter** | Empty *until* you break a feed. After the refusal demo it holds both cards. | Use it during section 3b, not before. |
-| **Telemetry cost** | Now shows a real per-insight figure (about ₹1.08) priced from actual token counts. | "Offline the calls are free, so that's what the same work would cost at list rates — modelled from real usage, not a bill." |
+| **Telemetry cost** | Shows a real per-insight figure (about ₹1.08) priced from actual token counts. | "Offline the calls are free, so that's what the same work would cost at list rates — modelled from real usage, not a bill." |
+| **Admin → advance the clock** | Works, and is a full replay: every drop due in the window lands, freshness is re-measured, the engine re-runs. Forward only. | Only click it if you have a reason to — it changes the date every other screen is measured against, so a 30-day jump invalidates the numbers you just showed. |
+| **Actions** | Shows nothing proposed and a "Considered and not proposed" list with two reasons. | **Worth showing.** "One action fails a precondition the data contradicts. The other is priced with the price elasticity we actually estimated, and that estimate says a promotion here loses money — so we don't recommend it. The catalog's intuition doesn't get to overrule the arithmetic." |
 
 **Two of the four scenarios are now live on screen** — the multi-cause movement
 (section 2) and the refusal (section 3b). The other two are real but quieter: "too small
@@ -266,10 +267,15 @@ All true, all forward-looking, none claimed as present.
 
 1. **Earn the calibration.** Our test data plants events too close together, so no single
    week has one clear cause. Regenerating it with proper spacing should make the
-   confidence score meaningful — and then the Trust screen fills in and Actions unlock.
-2. **Live intake view.** Data & sources currently refreshes on load; it was designed to
-   stream batches as they land.
-3. **Connect a real warehouse.** Everything reads through a contract layer, so pointing
+   confidence score meaningful — and then the Trust screen fills in and more insights
+   clear the bar at which actions are proposed.
+2. **Live intake view.** Data & sources re-polls every ten seconds and says so; it was
+   designed to be pushed batches as they land, which is a different thing.
+3. **The two missing marts.** Two action preconditions (`days_cover`,
+   `cross_serve_headroom_pct`) cannot be evaluated because nothing computes them yet, so
+   the actions that need them are withheld. That is the guard behaving correctly, and it
+   is also a gap: those marts are buildable from data we already hold.
+4. **Connect a real warehouse.** Everything reads through a contract layer, so pointing
    it at real tables is configuration rather than a rebuild. Not yet done.
 
 ---

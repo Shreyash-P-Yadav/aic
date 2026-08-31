@@ -1,13 +1,14 @@
 /**
- * The three interactive screens: Ask, Actions and the admin panel.
+ * The two question-shaped screens: Ask and Actions.
  *
- * The admin panel shows what each control will do *before* doing it, because an
- * interactive control that misbehaves on stage is worse than no control, and the
- * cheapest defence is a presenter who can read the consequence before they click.
+ * The admin panel used to live here and now has its own file — it is the only screen
+ * that writes rather than reads, and mixing it in made this file the place every
+ * interactive change landed regardless of what it touched.
  */
 
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { Card, EmptyState, ErrorState, SectionTitle, Skeleton } from '@/components/primitives';
 import { api, ApiError } from '@/lib/api';
@@ -102,6 +103,17 @@ export function Ask() {
               <>
                 <p className="text-base leading-relaxed text-ink">{answer.narrative}</p>
                 <p className="text-xs text-ink-muted">{answer.detail}</p>
+                {answer.insight_id ? (
+                  // The answer is a *view* of an insight that already ran, so it must be
+                  // possible to walk back to the evidence behind it. An answer you cannot
+                  // trace is a chatbot's answer.
+                  <Link
+                    to={`/insights/${answer.insight_id}`}
+                    className="inline-block text-xs text-ink-secondary underline underline-offset-2"
+                  >
+                    Open the evidence behind this answer →
+                  </Link>
+                ) : null}
               </>
             )}
           </div>
@@ -116,40 +128,81 @@ export function Actions() {
     queryKey: ['insights', ''],
     queryFn: ({ signal }) => api.insights({}, signal),
   });
-  const first = insights.data?.find((item) => item.status === 'published');
-  const detail = useQuery({
-    queryKey: ['insight', first?.insight_id],
-    queryFn: ({ signal }) => api.insight(first!.insight_id, signal),
-    enabled: Boolean(first),
+  const published = (insights.data ?? []).filter((item) => item.status === 'published');
+  // Every published insight, not just the first: an action lives on the insight that
+  // earned it, and the highest-confidence insight is not always the top of the feed —
+  // the feed is ranked by priority, which weighs materiality too. Showing one insight's
+  // actions made the screen look empty whenever the leader happened to be a Low-tier
+  // movement, which is a rendering accident, not a decision the engine took.
+  const details = useQueries({
+    queries: published.map((item) => ({
+      queryKey: ['insight', item.insight_id],
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.insight(item.insight_id, signal),
+    })),
   });
 
   if (insights.isPending) return <Skeleton rows={4} />;
-  if (!first) {
+  if (published.length === 0) {
     return <EmptyState title="No published insight yet" detail="Actions follow an insight." />;
   }
-  if (detail.isPending) return <Skeleton rows={4} />;
-  if (!detail.data || isAbstention(detail.data)) {
-    return <EmptyState title="This insight abstained, so it carries no action." />;
-  }
-  const actions = detail.data.actions;
-  if (actions.length === 0) {
-    return (
-      <EmptyState
-        title="No action at this confidence tier"
-        detail="Actions are suppressed entirely at Low or Insufficient confidence."
-      />
-    );
-  }
+  if (details.some((query) => query.isPending)) return <Skeleton rows={4} />;
+
+  const proposed = published.flatMap((item, index) => {
+    const payload = details[index]?.data;
+    if (!payload || isAbstention(payload)) return [];
+    return payload.actions.map((action) => ({ action, insight: item }));
+  });
+  const withheld = published.flatMap((item, index) => {
+    const payload = details[index]?.data;
+    if (!payload || isAbstention(payload)) return [];
+    return payload.actions_withheld.map((reason) => ({ reason, kpiId: item.kpi_id }));
+  });
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {actions.map((action) => (
-        <ActionCard key={action.action_id} action={action} />
-      ))}
+    <div className="space-y-4">
+      {proposed.length === 0 ? (
+        <EmptyState
+          title="No action proposed"
+          detail={
+            withheld.length > 0
+              ? 'Every governed action for the leading driver was considered and ruled out. The reasons are below.'
+              : 'No governed action applies to the leading driver on any published insight.'
+          }
+        />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {proposed.map(({ action, insight }) => (
+            <ActionCard
+              key={`${insight.insight_id}:${action.action_id}`}
+              action={action}
+              kpiId={insight.kpi_id}
+              tier={insight.tier}
+            />
+          ))}
+        </div>
+      )}
+      {withheld.length > 0 ? (
+        // Shown, not hidden. An action the system declined to recommend is a decision it
+        // took, and a screen that renders only the proposals makes that decision invisible.
+        <Card>
+          <SectionTitle hint="Each was evaluated against live data and ruled out">
+            Considered and not proposed
+          </SectionTitle>
+          <ul className="space-y-2 text-xs text-ink-secondary">
+            {withheld.map((item) => (
+              <li key={`${item.kpiId}:${item.reason}`} className="flex gap-2">
+                <span className="shrink-0 text-ink-muted">{item.kpiId}</span>
+                <span>{item.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
     </div>
   );
 }
 
-function ActionCard({ action }: { action: ActionFact }) {
+function ActionCard({ action, kpiId, tier }: { action: ActionFact; kpiId: string; tier: string }) {
   const [approved, setApproved] = useState(false);
   return (
     <Card>
@@ -157,6 +210,9 @@ function ActionCard({ action }: { action: ActionFact }) {
         {action.driver_id} → {action.lever}
       </p>
       <h3 className="mt-1 text-lg font-semibold text-ink">{action.title}</h3>
+      <p className="mt-0.5 text-xs text-ink-muted">
+        From {kpiId} at {tier} confidence
+      </p>
       <dl className="mt-3 space-y-1.5 text-sm">
         <div className="flex justify-between gap-3">
           <dt className="text-ink-muted">Expected impact</dt>
@@ -199,104 +255,5 @@ function ActionCard({ action }: { action: ActionFact }) {
         {approved ? 'Monitoring entry created' : 'Approve and monitor'}
       </button>
     </Card>
-  );
-}
-
-const CONTROLS = [
-  {
-    id: 'inject-event' as const,
-    title: 'Inject event',
-    consequence:
-      'Jumps the simulated clock to two days before a planted ledger event and replays through it. You choose when it breaks; the break itself is real, with a counterfactual the ground-truth ledger can vouch for.',
-    placeholder: 'EV-2026-0306-OUTAGE',
-  },
-  {
-    id: 'break-feed' as const,
-    title: 'Break a feed',
-    consequence:
-      'Pauses a source and runs the simulated clock forward until it has actually gone stale. Freshness walks to red on that contract’s own schedule while every other feed keeps delivering, the c4 signal collapses, and the engine re-runs and abstains rather than explaining revenue from the feeds that are left.',
-    placeholder: 'oms_orders',
-  },
-  {
-    id: 'restore-feed' as const,
-    title: 'Restore a feed',
-    consequence:
-      'Lets a paused source deliver again and runs the clock until its next drop lands. Freshness returns to green and the engine re-runs and publishes — so the abstention demo can be shown twice.',
-    placeholder: 'oms_orders',
-  },
-];
-
-export function Admin() {
-  const roles = useQuery({ queryKey: ['roles'], queryFn: ({ signal }) => api.roles(signal) });
-  return (
-    <div className="space-y-6">
-      <Card>
-        <SectionTitle hint="Each control says what it will do before it does it">
-          Demo controls
-        </SectionTitle>
-        <div className="grid gap-4 md:grid-cols-2">
-          {CONTROLS.map((control) => (
-            <ControlCard key={control.id} control={control} />
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <SectionTitle hint="Switching role changes the data, not the label">Roles</SectionTitle>
-        {roles.isPending ? <Skeleton rows={3} /> : null}
-        <ul className="space-y-2 text-sm">
-          {(roles.data ?? []).map((role) => (
-            <li key={role.name} className="rounded border border-hairline-border p-3">
-              <p className="font-medium text-ink">{role.display_name}</p>
-              <p className="mt-0.5 text-xs text-ink-secondary">{role.description}</p>
-              {Object.keys(role.bindings).length > 0 ? (
-                <p className="mt-1 text-xs text-ink-muted">
-                  Row-filter bindings:{' '}
-                  {Object.entries(role.bindings)
-                    .map(([key, value]) => `${key} = ${value}`)
-                    .join(', ')}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
-  );
-}
-
-function ControlCard({ control }: { control: (typeof CONTROLS)[number] }) {
-  const [target, setTarget] = useState(control.placeholder);
-  const run = useMutation({ mutationFn: () => api.demo(control.id, target) });
-  return (
-    <article className="rounded border border-hairline-border p-4">
-      <h3 className="text-sm font-semibold text-ink">{control.title}</h3>
-      <p className="mt-1 text-xs text-ink-secondary">{control.consequence}</p>
-      <div className="mt-3 flex gap-2">
-        <label className="sr-only" htmlFor={`target-${control.id}`}>
-          Target
-        </label>
-        <input
-          id={`target-${control.id}`}
-          value={target}
-          onChange={(event) => setTarget(event.target.value)}
-          className="flex-1 rounded border border-hairline-border bg-card px-2 py-1 text-xs text-ink"
-        />
-        <button
-          type="button"
-          onClick={() => run.mutate()}
-          className="rounded border border-hairline-axis px-3 py-1 text-xs text-ink"
-        >
-          Run
-        </button>
-      </div>
-      {run.isError ? (
-        <p className="mt-2 text-xs" style={{ color: 'var(--status-serious)' }}>
-          {run.error instanceof ApiError
-            ? (run.error.problem.detail ?? run.error.problem.title)
-            : 'The control is unavailable.'}
-        </p>
-      ) : null}
-      {run.data ? <p className="mt-2 text-xs text-ink-secondary">{run.data.detail}</p> : null}
-    </article>
   );
 }

@@ -16,6 +16,7 @@ from insight_copilot.contracts.registry import ContractRegistry
 from insight_copilot.datagen.corpus.models import Document
 from insight_copilot.engine.actions import ActionCatalog, ActionSelector, propagate_impact
 from insight_copilot.engine.bundle import AbstentionArtifact, InsightEvidenceBundle
+from insight_copilot.engine.bundle_mappers import action_numbers
 from insight_copilot.engine.calibration import ConfidenceScorer, IsotonicCalibrator
 from insight_copilot.engine.confidence import ConfidenceInputs, softmin
 from insight_copilot.engine.evidence import EvidenceRetriever, noisy_or
@@ -313,6 +314,9 @@ def test_an_action_whose_precondition_fails_is_not_proposed(
         "elasticity": -1.63,
         "elasticity_interval": (-3.01, -0.26),
         "lever_change": -0.08,
+        # Revenue came in below its baseline, so an admissible action has to push it back
+        # up. With a negative elasticity and a price cut, both candidates do.
+        "gap": -5.0e7,
         "today": NOW.date(),
     }
     passing = selector.select(
@@ -324,16 +328,68 @@ def test_an_action_whose_precondition_fails_is_not_proposed(
         **common,
     )
     unevaluable = selector.select(observed={"price_index": 1.08}, **common)
-    assert {item.spec.id for item in passing} == {
+    assert {item.spec.id for item in passing.chosen} == {
         "reverse_price_increase",
         "targeted_promotion_in_affected_segment",
     }
+    assert passing.withheld == []
     # The price index no longer clears the reversal's precondition, so that action is
     # withheld; the promotion, whose conditions are unrelated and still hold, is not.
-    assert {item.spec.id for item in failing} == {"targeted_promotion_in_affected_segment"}
-    assert {item.spec.id for item in unevaluable} == {"reverse_price_increase"}, (
+    assert {item.spec.id for item in failing.chosen} == {"targeted_promotion_in_affected_segment"}
+    assert any("failed" in reason for reason in failing.withheld)
+    assert {item.spec.id for item in unevaluable.chosen} == {"reverse_price_increase"}, (
         "an action was proposed on preconditions that could not be evaluated"
     )
+    assert any("could not check" in reason for reason in unevaluable.withheld), (
+        "an unevaluable precondition must be reported as such, not as a failure"
+    )
+
+
+def test_an_action_that_would_widen_the_gap_is_not_proposed(
+    registry: ContractRegistry, world: object
+) -> None:
+    """The catalog's intuition does not overrule the elasticity actually estimated.
+
+    A promotion is priced with the coefficient the regression returned. When that
+    coefficient says demand is inelastic, cutting price is priced as a *loss*, and an
+    action whose own arithmetic makes the movement worse is not a recommendation.
+    """
+    catalog = ActionCatalog.load("catalogs/actions_revenue.yaml")
+    selector = ActionSelector(catalog)
+    confidence = ConfidenceScorer().score(
+        ConfidenceInputs(
+            p_value=0.001,
+            materiality_ratio=6.0,
+            bootstrap_stability=0.95,
+            attribution_coverage=0.9,
+            ljung_box_p=0.4,
+            breusch_pagan_p=0.4,
+            estimator_agreement=0.95,
+            history_days=900,
+            evidence_corroboration=0.8,
+            independent_sources=3,
+            timing_gate_survivors=3,
+        ),
+        registry.kpi("net_revenue"),
+    )
+    selection = selector.select(
+        contract=registry.kpi("net_revenue"),
+        driver_id="price_index",
+        confidence=confidence,
+        baseline_value=1.0e8,
+        # A POSITIVE price elasticity of revenue: inelastic demand, so a price cut loses
+        # money. This is the sign the estimator actually returns on this build.
+        elasticity=0.93,
+        elasticity_interval=(0.31, 1.55),
+        lever_change=-0.08,
+        observed={"price_index": 1.08, "discount_depth_pct": 12.0, "gross_margin_pct": 48.0},
+        gap=-5.0e7,
+        today=NOW.date(),
+    )
+
+    assert selection.chosen == []
+    assert selection.withheld, "the refusal must be reported, not merely logged"
+    assert any("wrong way" in reason for reason in selection.withheld)
 
 
 def _document(
@@ -350,3 +406,55 @@ def _document(
         source_tier=2,
         syndication_group=syndication,
     )
+
+
+def test_a_proposed_action_carries_facts_for_the_numbers_it_will_be_narrated_with(
+    registry: ContractRegistry, world: object
+) -> None:
+    """The recommendation sentence quotes three figures; all three must be verifiable.
+
+    They were not. The pipeline emitted the action but no facts for its priced impact,
+    so a faithful sentence failed the number verifier and every persona fell back to the
+    template it had already rendered. The unit fixture happened to hand-write those
+    facts, which is exactly why the gap survived: the test could not see it.
+    """
+    catalog = ActionCatalog.load("catalogs/actions_revenue.yaml")
+    confidence = ConfidenceScorer().score(
+        ConfidenceInputs(
+            p_value=0.001,
+            materiality_ratio=6.0,
+            bootstrap_stability=0.95,
+            attribution_coverage=0.9,
+            ljung_box_p=0.4,
+            breusch_pagan_p=0.4,
+            estimator_agreement=0.95,
+            history_days=900,
+            evidence_corroboration=0.8,
+            independent_sources=3,
+            timing_gate_survivors=3,
+        ),
+        registry.kpi("net_revenue"),
+    )
+    selection = ActionSelector(catalog).select(
+        contract=registry.kpi("net_revenue"),
+        driver_id="price_index",
+        confidence=confidence,
+        baseline_value=1.0e8,
+        elasticity=-1.63,
+        elasticity_interval=(-3.01, -0.26),
+        lever_change=-0.08,
+        observed={"price_index": 1.08, "discount_depth_pct": 12.0, "gross_margin_pct": 48.0},
+        gap=-5.0e7,
+        today=NOW.date(),
+    )
+    assert selection.chosen, "the fixture is meant to produce at least one action"
+
+    facts = action_numbers(selection.chosen, "INR")
+    values = {round(fact.value, 6) for fact in facts}
+    for action in selection.chosen:
+        impact = action.expected_impact
+        assert round(impact.central, 6) in values
+        assert round(impact.low, 6) in values
+        assert round(impact.high, 6) in values
+    # Keyed by action id so two proposals cannot overwrite each other's price.
+    assert len({fact.key for fact in facts}) == 3 * len(selection.chosen)

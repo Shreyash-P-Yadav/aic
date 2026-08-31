@@ -35,7 +35,7 @@ began. The system is:
 - **A four-call-site LLM layer** with a deterministic number verifier, cite-or-drop
   hypotheses, an allowlist-validated planner, and a mandatory offline mock.
 - **A FastAPI service and a React UI** — eight screens, five roles, four personas,
-  provenance toggle, and two live demo controls.
+  provenance toggle, and four live demo controls.
 - **A learning loop and an eval suite** — feedback store, gated LightGBM ranker, case
   library, and a backtest that replays 416 ledger events through the real engine.
 
@@ -141,14 +141,18 @@ unreachable and silenced the product on the strength of a curve that measured no
 3. **An `UNKNOWN` category bucket reaches attribution.** Unmapped SKUs are 0.17% of
    revenue but can surface as a top segment in quiet windows, where the net gap in
    Adtributor's denominator is near zero. It is correct behaviour for the algorithm and
-   wrong behaviour for a product; the materiality floor suppresses it before publication,
-   so it is visible only inside the backtest.
-4. **The `intern` role's policy on `unit_volume` will not compile.** It declares a row
-   filter on `:user_region`, a binding the intern role never supplies. This is
-   **fail-closed** — nothing leaks, the intern is simply denied — but the denial is by
-   accident rather than by decision. The eval reports it separately from leakage
-   precisely so that "fixing" it by widening the policy is not the obvious move.
-   Entitlement leakage itself is **0**.
+   only half-right for a product; the materiality floor suppresses it before publication,
+   so it is visible mainly inside the backtest, and wherever it *is* shown it now carries
+   an `unmapped` label explaining what the bucket means. Escalating it as a DQ finding
+   is still outstanding — see "the three things I would fix first".
+4. ~~**The `intern` role's policy on `unit_volume` will not compile.**~~ **Fixed.** The
+   contract declared a row filter on `:user_region`, a binding the intern role never
+   supplies, so the compiler failed closed and the intern was denied by accident rather
+   than by decision. The grant now matches its sibling operational contract
+   (`order_fill_rate`): `rows: all`. `check_referential_integrity` rejects the whole
+   class now, so `make validate-contracts` catches it at authoring time rather than at
+   query time. Entitlement leakage was and remains **0**; policies that will not compile
+   is now **0** as well.
 
 ## Deferred
 
@@ -183,10 +187,18 @@ unreachable and silenced the product on the strength of a curve that measured no
    in the generator* — it is exactly the instrument this problem needs, and it is not
    currently exposed through any source feed. Surfacing it would move the marketing
    elasticity from "the right sign and 1.58× closer" to a number worth quoting.
-3. **Make the `UNKNOWN` bucket a first-class data-quality finding rather than an
-   attribution candidate.** A segment whose membership is *"we could not map these
-   SKUs"* is a data problem to escalate, not a cause to name, and it should route to the
-   data-quality surface instead of competing for rank 1.
+3. **Route the `UNKNOWN` bucket to the data-quality surface as well as the ladder.**
+   Partly done: an `UNKNOWN` member is now labelled `unmapped` wherever it is shown,
+   with an explanation on hover, so it no longer reads as a broken join. What is *not*
+   done is escalating it — a segment whose membership is "we could not map these SKUs"
+   is a data problem someone should be told about, not only a cause someone should read.
+   It should raise a DQ finding in parallel.
+
+   Note the earlier plan here was to remove it from attribution entirely. That would be
+   wrong: the simulated world plants a product launch that genuinely transacts as
+   `UNKNOWN` for over a week before its SKUs reach the product master, so suppressing
+   the bucket would hide a real movement rather than clean up a spurious one. Labelling
+   plus escalating is the correct shape; suppression is not.
 
 ## Strongest and weakest
 

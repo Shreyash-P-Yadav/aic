@@ -158,6 +158,10 @@ export interface InsightBundle {
   evidence_rejected_by_timing: string[];
   confidence: ConfidenceFact;
   actions: ActionFact[];
+  /** Governed actions considered and ruled out, each with its reason. An empty action
+   *  list plus a non-empty list here means "we thought about it and said no", which is
+   *  a different statement from "nothing applied". */
+  actions_withheld: string[];
   freshness: FreshnessFact[];
   lineage: LineageStep[];
 }

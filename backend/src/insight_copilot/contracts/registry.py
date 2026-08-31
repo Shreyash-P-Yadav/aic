@@ -8,6 +8,7 @@ property that lets the API pin a contract *version* into an audit row.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from insight_copilot.contracts.loader import discover, load_kpi_contract, load_source_contract
@@ -15,8 +16,17 @@ from insight_copilot.contracts.models import KPIContract
 from insight_copilot.contracts.source_models import SourceContract
 from insight_copilot.errors import ContractError
 from insight_copilot.logging import get_logger
+from insight_copilot.security.identity import ROLES
 
 logger = get_logger(__name__)
+
+_BIND_TOKEN = re.compile(r":([a-z][a-z0-9_]*)")
+"""Named bindings inside a row-filter template, e.g. ``:user_region``. Mirrors the
+compiler's token so validation sees exactly what compilation will see."""
+
+_ROLE_BINDINGS: dict[str, set[str]] = {name: set(role.bindings) for name, role in ROLES.items()}
+"""Session values each role carries, keyed by plain string: contract YAML names roles as
+text, and an unknown name is a problem to report rather than a type error to raise."""
 
 
 class ContractRegistry:
@@ -151,6 +161,8 @@ class ContractRegistry:
                     f"a derived submetric, nor a dimension"
                 )
 
+            problems.extend(_unbindable_row_filters(kpi_id, contract))
+
         for source_id, source in sorted(self._sources.items()):
             for check in source.reconciliation:
                 if check.against not in known_sources:
@@ -162,3 +174,30 @@ class ContractRegistry:
             raise ContractError(
                 f"{len(problems)} referential problem(s)", detail="\n".join(problems)
             )
+
+
+def _unbindable_row_filters(kpi_id: str, contract: KPIContract) -> list[str]:
+    """Row filters whose bind parameters the granted role does not actually carry.
+
+    A filter naming ``:user_region`` for a role with no region is not a narrow grant —
+    it is a policy that can never compile. The compiler fails closed on it, which is
+    right at query time and useless at authoring time: the role is denied by accident
+    rather than by decision, and nobody finds out until someone runs that query. A
+    contract that means "this role sees nothing" says ``deny: true`` and gives a reason.
+    """
+    problems: list[str] = []
+    for role_name, policy in sorted(contract.access.roles.items()):
+        if policy.deny or policy.rows == "all":
+            continue
+        supplied = _ROLE_BINDINGS.get(role_name)
+        if supplied is None:
+            problems.append(f"{kpi_id}: access grants unknown role {role_name!r}")
+            continue
+        missing = sorted(set(_BIND_TOKEN.findall(policy.rows)) - supplied)
+        if missing:
+            problems.append(
+                f"{kpi_id}: row filter for role {role_name!r} binds "
+                f"{', '.join(repr(name) for name in missing)}, which the role does not "
+                f"supply (it supplies {sorted(supplied)})"
+            )
+    return problems

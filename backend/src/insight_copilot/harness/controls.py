@@ -67,6 +67,12 @@ Twelve days clears the slowest cadence in the contract set (weekly, plus its SLA
 room to spare. It is a cap rather than a target: the loop stops the moment the state
 changes, so a daily feed goes red in a day and only a weekly one uses the headroom."""
 
+MIN_ADVANCE_DAYS = 1
+MAX_ADVANCE_DAYS = 30
+"""Bounds on the manual clock control. One day is the smallest move that can change a
+freshness verdict; thirty is a month of replay, which is about ten seconds of work and
+still short of the point where a presenter has walked past every planted event."""
+
 
 class DemoControls:
     """The interactive surface over the replay harness."""
@@ -217,7 +223,38 @@ class DemoControls:
             results=tuple(results),
         )
 
-    # ------------------------------------------------------------ 4. time travel --
+    # ------------------------------------------------------- 4. advance the clock --
+    def advance_clock(self, days: int) -> ControlOutcome:
+        """Run the simulated clock forward by whole days, landing everything due.
+
+        Forward-only, and deliberately not :meth:`time_travel`. Going backwards means a
+        wipe and a full historical reload, because the warehouse already holds rows the
+        new date has not happened yet — correct, but a minute of blank screen in the
+        middle of a demonstration. Forward is a replay: each scheduled drop lands in its
+        own order, freshness moves for every feed at once, and a paused feed goes stale
+        while the rest do not.
+        """
+        if not MIN_ADVANCE_DAYS <= days <= MAX_ADVANCE_DAYS:
+            raise IngestionError(
+                f"advance must be between {MIN_ADVANCE_DAYS} and {MAX_ADVANCE_DAYS} days",
+                detail=f"asked for {days}",
+            )
+        summary = self._harness.advance_days(days)
+        statuses = self._harness.freshness()
+        green = sum(1 for item in statuses if item.state == "green")
+        logger.info("controls.clock_advanced", days=days, landed=summary.landed)
+        return ControlOutcome(
+            control="advance_clock",
+            detail=(
+                f"clock advanced {days} simulated day(s) to "
+                f"{self._harness.clock.now.date().isoformat()}; {summary.landed} batches landed "
+                f"and {green} of {len(statuses)} feeds are green."
+            ),
+            sim_time=self._harness.clock.now,
+            freshness=tuple(statuses),
+        )
+
+    # ------------------------------------------------------------ 5. time travel --
     def time_travel(self, target: dt.date) -> ControlOutcome:
         """Move the clock and rebuild state to match.
 

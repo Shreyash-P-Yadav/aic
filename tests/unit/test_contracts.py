@@ -6,6 +6,7 @@ than one that fails to load, so most of these assert on semantics rather than sh
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -229,3 +230,30 @@ def test_source_contracts_are_the_11_built_feeds(registry: ContractRegistry) -> 
     full = [s for s in registry.source_ids if registry.source(s).build_tier == "full"]
     assert len(full) == 5
     assert isinstance(registry.source("oms_orders"), SourceContract)
+
+
+def test_a_row_filter_may_only_bind_values_the_role_actually_carries(tmp_path: Path) -> None:
+    """The intern has no region, so scoping the intern by region can never compile.
+
+    This is the authoring bug this check exists for: at query time the compiler fails
+    closed, which is safe but silent — the role ends up denied by accident rather than
+    by decision, and nobody learns of it until someone runs that exact query. Catching
+    it at validation time is the difference between a policy and a landmine.
+    """
+    raw = yaml.safe_load((CONTRACTS_DIR / "kpi/unit_volume.yaml").read_text())
+    raw["access"]["roles"]["intern"]["rows"] = "region = :user_region"
+    shutil.copytree(CONTRACTS_DIR / "kpi", tmp_path / "kpi")
+    shutil.copytree(CONTRACTS_DIR / "source", tmp_path / "source")
+    (tmp_path / "kpi/unit_volume.yaml").write_text(yaml.safe_dump(raw))
+    with pytest.raises(ContractError) as excinfo:
+        ContractRegistry.from_directory(tmp_path)
+    detail = excinfo.value.detail or ""
+    assert detail.splitlines() == [
+        "unit_volume: row filter for role 'intern' binds 'user_region', "
+        "which the role does not supply (it supplies [])"
+    ]
+
+
+def test_every_shipped_row_filter_binds_only_supplied_values(registry: ContractRegistry) -> None:
+    """The real contracts pass the same check — no accidental denials in the build."""
+    registry.check_referential_integrity()

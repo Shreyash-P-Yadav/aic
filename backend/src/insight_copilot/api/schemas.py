@@ -300,6 +300,17 @@ class DemoControlRequest(BaseModel):
     target: str = Field(description="Event id for inject-event, source id for break-feed.")
 
 
+class AdvanceClockRequest(BaseModel):
+    """How far to run the simulated clock forward.
+
+    Bounded here as well as in the control, because a request body is the one input a
+    caller controls completely: rejecting 10,000 days at the edge is cheaper than
+    discovering it as a ten-minute replay.
+    """
+
+    days: int = Field(default=1, ge=1, le=30, description="Whole simulated days to advance.")
+
+
 class DemoControlResponse(BaseModel):
     """What the control did."""
 

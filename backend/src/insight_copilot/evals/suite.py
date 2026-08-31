@@ -23,10 +23,12 @@ from insight_copilot.evals.elasticity import ElasticityComparison
 from insight_copilot.evals.models import EvalReport
 from insight_copilot.evals.sections import (
     attribution_section,
-    budget_section,
     calibration_section,
     detection_section,
     elasticity_section,
+)
+from insight_copilot.evals.sections_delivery import (
+    budget_section,
     entitlement_section,
     narration_section,
 )

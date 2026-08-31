@@ -89,7 +89,7 @@ access:
     analyst: {rows: all, columns: all}
     marketing_lead: {rows: all, columns: all}
     rsm_north: {rows: "region = :user_region", columns: all}
-    intern: {rows: "region = :user_region", columns: all, note: "aggregate views only"}
+    intern: {rows: all, columns: all, note: "aggregate views only"}
   audit: {log_queries: true, log_narratives: true, retention_days: 365}
 
 actions_ref: catalogs/actions_revenue.yaml

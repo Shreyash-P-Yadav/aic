@@ -150,14 +150,22 @@ query, and a refusal is logged as carefully as a result.
 
 ## Demo controls
 
-**Admin** carries two controls, and each says what it will do before it does it:
+**Admin** carries four controls, and each says what it will do before it does it. All
+four re-run the engine afterwards, because a control that changes the world without
+re-running the engine changes nothing anyone can see:
 
 - **Inject event** — jumps the simulated clock to two days before a planted ledger
   event and replays through it. The break is real; a counterfactual in the ground-truth
   ledger can vouch for what it should have cost.
-- **Break a feed** — pauses a source. Freshness then decays on *that contract's own SLA
-  schedule*, not on a UI timer, and the engine moves from publishing to hedging to
-  abstaining as `c4` degrades.
+- **Break a feed** — pauses a source, then runs the clock forward until it has actually
+  gone stale. Freshness decays on *that contract's own SLA schedule*, not on a UI timer,
+  and the engine moves from publishing to hedging to abstaining as `c4` degrades.
+- **Restore a feed** — lets a paused source deliver again, so the refusal can be shown
+  more than once without restarting the application.
+- **Advance the clock** — replays forward by whole days: every drop due in the window
+  lands in order and freshness is re-measured against each contract's own SLA. Forward
+  only. Backwards would mean wiping the warehouse and reloading it, because the marts
+  already hold rows for days that would not have happened yet.
 
 ## What the LLM does and does not do
 
@@ -169,7 +177,7 @@ query, and a refusal is logged as carefully as a result.
 | Price / volume / mix split | Bennet indicator (exact identity) | the parts sum to Δ to 1e-6, property-tested |
 | Driver coefficients and intervals | SARIMAX / OLS-HAC (statsmodels) | two estimators; their disagreement is reported |
 | Confidence, tier, abstention | six measured signals → softmin → isotonic | backtested; reported uncalibrated until fitted |
-| Recommended actions | governed catalogue, preconditions evaluated | an unevaluable precondition suppresses the action |
+| Recommended actions | governed catalogue, preconditions evaluated, impact priced from the estimated elasticity | an unevaluable precondition suppresses the action; so does an expected impact that would widen the gap |
 | **Query plans** | LLM proposes an **intent**, never SQL | allowlist validation against the contract |
 | **Candidate hypotheses** | LLM | cite-or-drop against the bundle's own documents |
 | **Narrative prose** | LLM, from a finished bundle | every number re-extracted and matched; every causal claim entailment-checked |

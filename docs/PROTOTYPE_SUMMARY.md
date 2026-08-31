@@ -190,14 +190,29 @@ and well-known problem in the industry. Our method gets **1.58× closer to the t
 answer than the naive approach**, but not to the exact figure. We report the uncertainty
 rather than hiding it.
 
-**Two screens are incomplete:**
-- **Admin** has 3 working controls (inject event, break feed, restore feed) and no
-  clock control
-- **Data & Sources** was meant to stream arrivals live; it currently refreshes on load
-- **Trust** now renders the full backtest; what it cannot show is an *adopted*
-  calibration curve, because the map did not earn adoption
-- **Actions** is empty by design — actions are suppressed below High confidence, and
-  nothing reaches High while the calibration is unadopted
+**What is still partial:**
+- **Admin** has 4 working controls: inject event, break a feed, restore a feed, and
+  advance the clock. Moving the clock *backwards* is not offered — it would mean
+  wiping the warehouse and reloading it, because the marts already hold rows for days
+  that would not have happened yet
+- **Data & Sources** re-polls freshness and data quality every 10 seconds, and says on
+  screen that it is polling rather than being pushed to. A real push stream is future
+  work
+- **Trust** renders the full backtest; what it cannot show is an *adopted* calibration
+  curve, because the map did not earn adoption
+- **Actions** shows what was proposed *and* what was considered and ruled out, with the
+  reason for each. In the current run every candidate is ruled out, and the two reasons
+  are worth reading: one action fails a precondition the live data actually contradicts,
+  and the other is priced with the price elasticity the regression genuinely estimated —
+  which on this data comes out **positive**, meaning a promotion is priced as a loss
+  rather than a recovery. An action whose own arithmetic makes the movement worse is not
+  a recommendation, so it is withheld and the reason is printed. That is the system's
+  first law working: the statistics decide, and the model is not allowed to overrule
+  them because the catalog entry sounds sensible. Two further preconditions
+  (`days_cover`, `cross_serve_headroom_pct`) cannot be evaluated at all because no mart
+  provides them — and an unevaluable precondition is treated exactly like a failed one,
+  because defaulting it to a plausible zero would turn "we could not check this" into
+  "this passed"
 
 **Not yet real-world tested.** Everything runs on simulated data. Connecting a real
 warehouse is a configuration change, not a rebuild — but it has not been done.
