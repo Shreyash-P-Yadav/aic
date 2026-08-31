@@ -1,0 +1,22 @@
+# Single lint/format configuration for backend/src and tests.
+# Root-level so both trees resolve the same rules regardless of invocation directory.
+line-length = 100
+target-version = "py311"
+src = ["backend/src", "tests"]
+# The design documents in docs/ are authoritative inputs, not source. Ruff formats
+# Python inside markdown fences, which would silently rewrite them.
+extend-exclude = ["docs", "frontend", ".venv"]
+
+[lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ARG", "PTH"]
+# N818: our exception names are domain nouns (EntitlementError is fine, but
+#       InsufficientEvidenceError reads better than ...Exception).
+# B008: FastAPI's Depends() in defaults is the framework idiom.
+# RUF012: pydantic model attributes are not ClassVar.
+ignore = ["N818", "B008", "RUF012"]
+
+[lint.per-file-ignores]
+"tests/**" = ["ARG001", "ARG002", "SIM117"]
+
+[lint.isort]
+known-first-party = ["insight_copilot"]

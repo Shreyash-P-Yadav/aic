@@ -1,0 +1,25 @@
+# Scenario D — role-based entitlement. There is NO special data for this scenario and
+# there deliberately is not: the whole demonstration happens in the contract-to-SQL
+# compiler, on the same question and the same underlying numbers, with only the
+# caller's role changing.
+#
+# The event exists so the ledger documents all four demo scenarios in one place, and
+# so the demo script has a stable id to point at. Its magnitude is `none` and it
+# computes no ground truth, because it changes nothing about the world.
+
+- event_id: EV-2026-0329-ENTITLEMENT-DEMO
+  type: data_incident
+  event_set: scenario
+  description: >
+    Same question - "why did revenue drop last week?" - asked by the CFO, by
+    RSM-North and by an intern. The compiler injects a region row filter for the RSM
+    and masks margin and discount depth; the intern is refused with the contract's
+    own reason and the refusal is audited. Asking about blended ROAS as the RSM hits
+    a DOMAIN denial from the same policy block, so row-, column- and domain-level
+    control are all demonstrated from one YAML file.
+  window: {start: 2026-03-29, end: 2026-03-29}
+  magnitude: {kind: none}
+  detectability: none
+  evidence: {documents: 0}
+  ground_truth: {compute: false}
+  demo_role: scenario_D_primary

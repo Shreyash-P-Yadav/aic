@@ -1,0 +1,49 @@
+# I7 - lightweight. A snapshot, not a ledger: intra-day movement is unreconstructable,
+# which is why the implied position and the snapshot disagree by 1-4%.
+source_id: inventory_snapshots
+system: "Daily inventory snapshot table"
+owner: supply-analytics
+transport: db_replica
+format: parquet
+landing_path: "landing/inventory_snapshots/dt={date}/"
+build_tier: lightweight
+quality_tier: medium
+
+arrival:
+  cron: "15 4 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 30
+  failure_probability: 0.02
+latency_sla_hours: 30
+
+covers:
+  grain: [snapshot_date, warehouse, product_sku]
+  period: previous_day
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 1
+  columns:
+    snapshot_date: {type: date, pk: true}
+    warehouse: {type: string, pk: true, allowed: [DC-North, DC-West, DC-South, DC-East]}
+    product_sku: {type: string, pk: true}
+    on_hand_units: {type: integer, min: 0, max: 5000000}
+    in_transit_units: {type: integer, min: 0, max: 5000000}
+    days_cover: {type: decimal, min: 0, max: 400}
+  drift_policy: quarantine_and_alert
+
+watermark: snapshot_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 100
+  row_count_max: 30000
+  max_frac_violating: {negative_on_hand: 0.0}
+
+reconciliation:
+  - {against: wms_fulfilment, measure: on_hand_units, tolerance_pct: 4.0, window: day, on_breach: warn}
+
+history_available_months: 24
+known_issues: [snapshot_not_ledger, shrinkage, in_transit_timing]
+classification: internal_operations

@@ -1,0 +1,15 @@
+# Style card for the CFO persona. Tone, length and what must appear are governance,
+# not prompt-craft: they are what a role is entitled to be told and in what form.
+persona: cfo
+display_name: "CFO"
+tone: "Direct, financial, decision-oriented. No method detail unless it changes the number."
+max_sentences: 4
+number_format: crore
+required_elements: [headline_impact, driver, confidence, action_owner]
+forbidden_elements: [coefficients, p_values, diagnostics]
+show_actions: true
+tier_language:
+  High: "states the cause"
+  Moderate: "states the leading explanation and its share"
+  Low: "reports the movement and the shortlist, no cause"
+  Insufficient: "reports the movement and why it cannot be explained"

@@ -1,0 +1,91 @@
+/*
+ * The design system. Every colour in the application is defined here and nowhere
+ * else — components reference tokens by ROLE, never by hex.
+ *
+ * WHY: dark mode is a first-class selected theme rather than an inverted filter, and
+ * a filter cannot know that a "critical" red must stay red while a page ground flips.
+ * Defining both palettes as the same variable names makes the swap total and safe.
+ *
+ * Series colours are a FIXED ORDER assigned by entity, never cycled by rank, so the
+ * same region keeps the same colour across every chart on every screen.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface-page: #f9f9f7;
+  --surface-card: #fcfcfb;
+
+  /* Ink */
+  --ink-primary: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+
+  /* Hairlines */
+  --hairline-grid: #e1e0d9;
+  --hairline-axis: #c3c2b7;
+  --hairline-border: rgba(11, 11, 11, 0.1);
+
+  /* Series — fixed order, assigned by entity, never cycled */
+  --series-1: #2a78d6; /* blue */
+  --series-2: #eb6834; /* orange */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #eda100; /* yellow */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #008300; /* green */
+  --series-7: #4a3aa7; /* violet */
+  --series-8: #e34948; /* red */
+
+  /* Sequential — a single blue ramp. Never a rainbow. */
+  --seq-1: #cde2fb;
+  --seq-2: #9cc4f4;
+  --seq-3: #6aa3e8;
+  --seq-4: #3f7fd0;
+  --seq-5: #2359a6;
+  --seq-6: #0d366b;
+
+  /* Diverging — blue to red through a GRAY midpoint */
+  --div-neg: #2a78d6;
+  --div-mid: #f0efec;
+  --div-pos: #d03b3b;
+
+  /* Status — reserved. Never reused as a series colour; always paired with icon + label. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(11, 11, 11, 0.04), 0 4px 12px rgba(11, 11, 11, 0.05);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface-page: #0d0d0d;
+  --surface-card: #1a1a19;
+
+  --ink-primary: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+
+  --hairline-grid: #2c2c2a;
+  --hairline-axis: #383835;
+  --hairline-border: rgba(255, 255, 255, 0.1);
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+
+  --div-neg: #3987e5;
+  --div-mid: #383835;
+  --div-pos: #d03b3b;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+}

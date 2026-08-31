@@ -1,0 +1,53 @@
+# I8 - corpus only. The classic "the business knows but the data doesn't" gap:
+# spreadsheets and a planning tool, human-entered, late, with missing end dates and
+# free-text conditions. Its dual dates are why a February memo explains an April move.
+source_id: pricing_memos
+system: "Pricing and promo calendar (spreadsheets + planning tool, partly manual)"
+owner: pricing-committee
+transport: file_watch
+format: jsonl
+landing_path: "landing/pricing_memos/dt={date}/"
+build_tier: corpus_only
+quality_tier: low
+
+arrival:
+  cron: "0 11 * * 1-5"
+  tz: Asia/Kolkata
+  jitter_minutes: 180
+  failure_probability: 0.08
+latency_sla_hours: 168
+
+covers:
+  grain: [doc_id]
+  period: continuous
+
+restatement: {expected: true, window_days: 30, policy: supersede_by_batch}
+
+schema:
+  version: 1
+  columns:
+    doc_id: {type: string, pk: true}
+    memo_type: {type: string, allowed: [price_change, promo_start, promo_end, campaign_brief, weekly_review, supplier_note]}
+    author: {type: string, pii: true}
+    body_text: {type: string, pii: true}
+    publish_date: {type: date}
+    effective_date: {type: date, null_frac_max: 0.15}
+    end_date: {type: date, description: "Often missing - a real defect, not an omission."}
+    scope_skus: {type: string}
+    scope_regions: {type: string}
+    source_tier: {type: integer, min: 1, max: 4}
+  drift_policy: accept_and_flag
+
+watermark: publish_date
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 0
+  row_count_max: 100
+  max_frac_violating: {missing_end_date: 0.35, late_entry: 0.30}
+
+reconciliation: []
+
+history_available_months: 24
+known_issues: [late_entry, missing_end_dates, free_text_conditions, human_error_in_explanations]
+classification: internal_commercial

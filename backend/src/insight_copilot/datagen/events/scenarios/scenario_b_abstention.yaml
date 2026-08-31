@@ -1,0 +1,48 @@
+# Scenario B — the abstention. Nothing is wrong with the BUSINESS; something is wrong
+# with what we know about it. Both events are data incidents: they have no mechanical
+# effect on demand, supply or price, and their magnitude is deliberately `none`.
+# The damage is done in the feed, and it is applied at source projection (P4) and
+# ingestion (P5), not here.
+#
+# This is the point of the scenario. Detection still fires on the apparent +22% ROAS
+# move; the hard gates are what stop the engine from explaining it.
+
+- event_id: EV-2026-0323-MARTECH-MISS
+  type: data_incident
+  event_set: scenario
+  description: >
+    The MarTech aggregator's Monday drop never arrives. The marketing spend feed goes
+    stale against its 56-hour latency SLA, and because the missed period sits inside
+    the 14-day restatement window, the weeks that ARE present may still be revised.
+    Freshness decays from green to amber to red on the SLA schedule, and c4 (data
+    trust) decays with it.
+  window: {start: 2026-03-23, end: 2026-03-31}
+  magnitude: {kind: none}
+  detectability: none
+  evidence:
+    documents: 1
+    contradiction: false
+    syndication: 1
+    post_dated_decoy: false
+  ground_truth: {compute: false}
+  demo_role: scenario_B_primary
+
+- event_id: EV-2026-0309-ATTRIBUTION-BREAK
+  type: data_incident
+  event_set: scenario
+  description: >
+    The platform's attributed revenue diverges from order-linked revenue by about 18%
+    against a 5% contract tolerance - a view-through window change on the platform
+    side. Normal disagreement for this pair is 5-15%; this is outside it. The
+    blended_roas contract's `reconciliation_within_tolerance` hard gate fires, and
+    the engine may DESCRIBE the movement but may not attribute drivers to it.
+  window: {start: 2026-03-09, end: 2026-03-31}
+  magnitude: {kind: none}
+  detectability: none
+  evidence:
+    documents: 1
+    contradiction: false
+    syndication: 1
+    post_dated_decoy: false
+  ground_truth: {compute: false}
+  demo_role: scenario_B_reconciliation

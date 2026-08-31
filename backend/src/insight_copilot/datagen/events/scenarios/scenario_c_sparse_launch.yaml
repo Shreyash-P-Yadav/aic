@@ -1,0 +1,32 @@
+# Scenario C — sparse history. "Aurora X Serum" launched 11 Mar 2026, so it has 18
+# days of history at the demo's today (29 Mar 2026) against a contract minimum of 28.
+#
+# The dip is NOT planted as an anomaly. It arises from two ordinary things: the
+# launch-promo expiring on day 14, and the natural decay of the launch curve. The
+# engine's job is to recognise that it sits INSIDE the pooled band from twelve
+# comparable launches and to say nothing - while naming n=18 as the reason it is
+# deliberately less sensitive.
+#
+# The event is recorded so the ledger documents the promo that caused the dip; its
+# ground truth is computed so the eval can confirm the effect is real but immaterial.
+
+- event_id: EV-2026-0311-AURORA-LAUNCH-PROMO
+  type: promo
+  event_set: scenario
+  description: >
+    Launch promotion on Aurora X Serum: 20% off for the first fourteen days, then
+    back to list. Nine of the twelve comparable launches in the history carry the
+    same pattern, which is exactly why the pooled band is wide enough to contain the
+    day-15-to-20 dip that follows.
+  scope:
+    skus: [SKU-0037]
+  window: {start: 2026-03-11, end: 2026-03-24}
+  magnitude: {kind: price_change, price_multiplier: 0.80}
+  detectability: low
+  evidence:
+    documents: 2
+    contradiction: false
+    syndication: 1
+    post_dated_decoy: false
+  ground_truth: {compute: true, method: counterfactual}
+  demo_role: scenario_C_primary

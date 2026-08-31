@@ -1,0 +1,99 @@
+# Cross-source ratio metric: MarTech numerator against an OMS cross-check. Its hard
+# gate is what makes Scenario B abstain - an 18% reconciliation gap against a 5%
+# tolerance blocks attribution even though detection itself still fires.
+contract_version: "1.1.0"
+
+kpi:
+  id: blended_roas
+  name: "Blended Marketing ROAS"
+  tier: 2
+  business_owner: "CMO Office"
+  data_steward: "marketing-analytics"
+  description: >
+    Marketing-attributed net revenue per rupee of marketing spend, blended across
+    channels. A ratio metric: numerator and denominator aggregate separately, because
+    the average of weekly ratios is not the ratio of the sums.
+
+definition:
+  base_grain: [iso_week, channel]
+  default_reporting_grain: [iso_week]
+  dimensions: [iso_week, channel, campaign_id]
+  calendar: iso_week
+  unit: ratio
+  aggregation: weighted
+  ratio_of: {numerator: attributed_revenue_inr, denominator: spend_inr}
+  null_policy: "missing spend week -> KPI undefined for the week (never imputed); DQ flag"
+
+calculation:
+  measure_sql: "SUM(attributed_revenue_inr) / NULLIF(SUM(spend_inr), 0)"
+  source_view: gold.fct_marketing_weekly
+  derived_submetrics:
+    attributed_revenue_inr: "SUM(attributed_revenue_inr)"
+    spend_inr: "SUM(spend_inr)"
+    order_linked_revenue_inr: "SUM(order_linked_revenue_inr)"
+    reconciliation_gap_pct: "100.0 * ABS(SUM(attributed_revenue_inr) - SUM(order_linked_revenue_inr)) / NULLIF(SUM(order_linked_revenue_inr), 0)"
+
+sources:
+  - {source_id: martech_weekly, role: primary, required: true}
+  - {source_id: oms_orders, role: reconciliation, required: true, tolerance_pct: 5.0}
+
+lineage:
+  - {step: land, from: martech_weekly.weekly_drop, to: bronze.martech_weekly, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.martech_weekly, to: silver.spend_conformed, transform: ingest/silver.py}
+  - step: blend
+    from: [silver.spend_conformed, silver.sales_conformed]
+    to: gold.fct_marketing_weekly
+    transform: ingest/gold.py
+
+drivers:
+  identity:
+    - {id: attributed_revenue_inr, role: numerator}
+    - {id: spend_inr, role: denominator}
+    - {id: channel_mix, role: mix, over: [channel]}
+  exogenous:
+    - {id: creative_refresh_flag, direction: contextual, lag_days: [0, 14], controllable: true, lever: creative_ops}
+    - {id: cpm_index, direction: negative, lag_days: [0, 7]}
+    - {id: promo_calendar, direction: contextual, lag_days: [-7, 7]}
+  downstream_of: [marketing_spend, net_revenue]
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.025
+    fdr_q: 0.05
+    shift_persistence_days: 14
+  business:
+    min_pct_move: 10.0
+    min_spend_at_risk_inr: 500000
+
+confidence_policy:
+  min_history_days_full_stats: 84
+  abstain_below: 0.50
+  hedge_below: 0.75
+  hard_gates:
+    any_signal_min: 0.30
+    required_sources_fresh: true
+    reconciliation_within_tolerance: true
+    no_open_restatement_on_flagged_periods: true
+
+access:
+  classification: internal_marketing
+  roles:
+    cfo: {rows: all, columns: all}
+    marketing_lead: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    rsm_north: {deny: true, reason: "Marketing domain entitlement required."}
+    intern: {deny: true, reason: "Marketing domain entitlement required."}
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_marketing.yaml
+
+monitoring:
+  freshness_sla_hours: 56
+  drift_checks: {input_psi_monthly: 0.25}
+
+sparse_history_policy:
+  method: channel_pool
+  pool_by: [channel]
+  guardrail_only_below_n: 8
+  graduation: {full_stats_n: 12}

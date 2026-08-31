@@ -1,0 +1,54 @@
+# I6 - lightweight. The product master updates late, so new SKUs transact before it
+# knows them and land in the UNKNOWN bucket with a DQ flag. That is the mechanism
+# behind Scenario C's launch appearing without a category for its first few days.
+source_id: pim_products
+system: "Product information management (PIM) table, event-driven"
+owner: category-management
+transport: db_replica
+format: parquet
+landing_path: "landing/pim_products/dt={date}/"
+build_tier: lightweight
+quality_tier: medium
+
+arrival:
+  cron: "30 3 * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 60
+  failure_probability: 0.03
+latency_sla_hours: 48
+
+covers:
+  grain: [product_sku]
+  period: continuous
+
+restatement: {expected: true, window_days: 90, policy: supersede_by_batch}
+
+schema:
+  version: 2
+  columns:
+    product_sku: {type: string, pk: true}
+    valid_from: {type: date, pk: true}
+    product_name: {type: string}
+    category: {type: string, allowed: [Haircare, Skincare, Bodycare, Home Fragrance, Surface Care, Baby, UNKNOWN]}
+    pack_size_ml: {type: integer, min: 0, max: 20000}
+    unit_cost: {type: decimal, min: 0, max: 500000, null_frac_max: 0.05}
+    list_price: {type: decimal, min: 0, max: 500000}
+    launch_date: {type: date}
+    discontinued_date: {type: date}
+  drift_policy: quarantine_and_alert
+
+watermark: valid_from
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 100
+  row_count_max: 1000
+  comparisons:
+    - "unit_cost <= list_price"
+  max_frac_violating: {unknown_category: 0.05, missing_cost: 0.05}
+
+reconciliation: []
+
+history_available_months: 36
+known_issues: [late_master_update, unknown_members, slowly_changing_dimension]
+classification: internal_product

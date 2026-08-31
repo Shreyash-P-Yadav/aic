@@ -1,0 +1,105 @@
+# Driver and KPI in one. Same source and grain as net_revenue, but a count measure:
+# no log transform, and a Poisson/NB interval path for the intermittent SKUs.
+contract_version: "1.1.0"
+
+kpi:
+  id: unit_volume
+  name: "Unit Volume"
+  tier: 2
+  business_owner: "COO Office"
+  data_steward: "analytics-eng"
+  description: >
+    Units sold net of cancellations, before returns. The quantity term of the Bennet
+    decomposition and the mediator through which every demand driver reaches revenue.
+
+definition:
+  base_grain: [date, product_sku, region, channel]
+  default_reporting_grain: [date]
+  dimensions: [date, iso_week, product_sku, category, region, channel, customer_segment]
+  calendar: fiscal_apr_mar
+  unit: units
+  aggregation: sum
+  null_policy: "no sales row = 0 units; unknown dim member -> 'UNKNOWN' + DQ flag"
+
+calculation:
+  measure_sql: "SUM(units)"
+  source_view: gold.fct_revenue_daily
+  derived_submetrics:
+    zero_day_frac: "AVG(CASE WHEN units = 0 THEN 1.0 ELSE 0.0 END)"
+    orders: "COUNT(DISTINCT order_id)"
+
+sources:
+  - {source_id: oms_orders, role: primary, required: true}
+
+lineage:
+  - {step: land, from: oms_orders.order_lines, to: bronze.oms_order_lines, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.oms_order_lines, to: silver.sales_conformed, transform: ingest/silver.py}
+  - {step: mart, from: silver.sales_conformed, to: gold.fct_revenue_daily, transform: ingest/gold.py}
+
+drivers:
+  identity:
+    - {id: own_volume, role: quantity}
+    - {id: mix, role: mix, over: [product_sku]}
+  exogenous:
+    - id: fill_rate
+      kpi_ref: order_fill_rate
+      direction: positive
+      lag_days: [0, 7]
+      controllable: true
+      lever: replenishment
+      elasticity_prior: {mean: 0.6, sd: 0.2}
+    - id: marketing_adstock
+      kpi_ref: marketing_spend
+      direction: positive
+      lag_days: [0, 21]
+      adstock_half_life_days: 7
+      controllable: true
+      lever: media_budget
+      elasticity_prior: {mean: 0.16, sd: 0.10}
+    - id: price_index
+      direction: negative
+      lag_days: [0, 3]
+      controllable: true
+      lever: pricing
+      elasticity_prior: {mean: -1.9, sd: 0.5}
+    - {id: holiday_promo_calendar, direction: contextual, lag_days: [-10, 7]}
+    - {id: weather_index, direction: contextual, lag_days: [0, 3]}
+  feeds:
+    - {kpi_ref: net_revenue, lag_days: [0, 0]}
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.01
+    fdr_q: 0.05
+    shift_persistence_days: 3
+  business:
+    min_pct_move: 4.0
+
+confidence_policy:
+  min_history_days_full_stats: 28
+  abstain_below: 0.50
+  hedge_below: 0.75
+  hard_gates: {any_signal_min: 0.30, required_sources_fresh: true}
+
+access:
+  classification: internal_operations
+  roles:
+    cfo: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    marketing_lead: {rows: all, columns: all}
+    rsm_north: {rows: "region = :user_region", columns: all}
+    intern: {rows: all, columns: all, note: "aggregate views only"}
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_revenue.yaml
+
+monitoring:
+  freshness_sla_hours: 30
+  drift_checks: {input_psi_monthly: 0.2}
+
+sparse_history_policy:
+  method: hierarchical_pool
+  pool_by: [category, region]
+  guardrail_only_below_n: 28
+  graduation: {full_stats_n: 28, weekly_seasonality_n: 56}

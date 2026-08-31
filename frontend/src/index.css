@@ -1,0 +1,36 @@
+@import './styles/theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    /* One family, no display face. */
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--surface-page);
+    color: var(--ink-primary);
+    margin: 0;
+    /* No horizontal page scroll at any width — panels scroll inside themselves. */
+    overflow-x: hidden;
+  }
+
+  * {
+    border-color: var(--hairline-border);
+  }
+}
+
+@layer utilities {
+  /* tabular-nums belongs in table columns and axis ticks ONLY, never hero numbers. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}

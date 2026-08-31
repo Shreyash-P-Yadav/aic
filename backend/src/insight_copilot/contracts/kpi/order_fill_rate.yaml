@@ -1,0 +1,105 @@
+# Leading indicator of net_revenue. Daily grain but a T+2 arrival, so every insight
+# built on it is labelled "as of T-2" when the latency binds.
+contract_version: "1.0.2"
+
+kpi:
+  id: order_fill_rate
+  name: "Order Fill Rate"
+  tier: 2
+  business_owner: "COO Office"
+  data_steward: "supply-analytics"
+  description: >
+    Units shipped complete and on time divided by units ordered. Root-cause
+    territory - nothing upstream of it in the driver DAG is modelled.
+
+definition:
+  base_grain: [date, warehouse, product_sku]
+  default_reporting_grain: [date, region]
+  dimensions: [date, iso_week, warehouse, product_sku, category, region]
+  calendar: gregorian
+  unit: percent
+  aggregation: weighted
+  ratio_of: {numerator: units_shipped_ok, denominator: units_ordered}
+  null_policy: "no orders -> undefined (excluded from aggregates, never imputed as 100%)"
+
+calculation:
+  measure_sql: "100.0 * SUM(units_shipped_ok) / NULLIF(SUM(units_ordered), 0)"
+  source_view: gold.fct_fulfilment_daily
+  derived_submetrics:
+    units_ordered: "SUM(units_ordered)"
+    units_shipped_ok: "SUM(units_shipped_ok)"
+    supplier_name: "ANY_VALUE(supplier_name)"
+
+sources:
+  - {source_id: wms_fulfilment, role: primary, required: true}
+  - {source_id: inventory_snapshots, role: primary, required: false}
+  - {source_id: oms_orders, role: reconciliation, required: false, tolerance_pct: 2.0}
+
+lineage:
+  - {step: land, from: wms_fulfilment.shipments, to: bronze.wms_shipments, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.wms_shipments, to: silver.fulfilment_conformed, transform: ingest/silver.py}
+  - {step: mart, from: silver.fulfilment_conformed, to: gold.fct_fulfilment_daily, transform: ingest/gold.py}
+
+drivers:
+  identity:
+    - {id: units_shipped_ok, role: numerator}
+    - {id: units_ordered, role: denominator}
+  exogenous:
+    - id: inventory_days_cover
+      direction: positive
+      lag_days: [0, 3]
+      controllable: true
+      lever: replenishment
+      elasticity_prior: {mean: 0.35, sd: 0.15}
+    - id: warehouse_incidents
+      direction: negative
+      lag_days: [0, 5]
+      controllable: true
+      lever: ops_escalation
+      source: support_tickets
+    - {id: inbound_delay_days, direction: negative, lag_days: [3, 21], controllable: false}
+  downstream_of: []
+  feeds:
+    - {kpi_ref: net_revenue, lag_days: [0, 7]}
+    - {kpi_ref: unit_volume, lag_days: [0, 7]}
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.01
+    fdr_q: 0.05
+    shift_persistence_days: 2
+  business:
+    min_abs_move_pp: 3.0
+    escalate_if_below_pct: 90.0
+
+confidence_policy:
+  min_history_days_full_stats: 28
+  abstain_below: 0.50
+  hedge_below: 0.75
+  hard_gates:
+    any_signal_min: 0.30
+    required_sources_fresh: true
+    lag_awareness: "insights are labelled 'as of T-2' when the WMS latency binds"
+
+access:
+  classification: internal_operations
+  roles:
+    cfo: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    rsm_north: {rows: "region = :user_region", columns: all}
+    marketing_lead: {rows: all, columns: {mask: [supplier_name]}}
+    intern: {rows: all, columns: {mask: [supplier_name]}, note: "aggregate views only"}
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_supply.yaml
+
+monitoring:
+  freshness_sla_hours: 72
+  drift_checks: {input_psi_monthly: 0.2}
+
+sparse_history_policy:
+  method: warehouse_pool
+  pool_by: [warehouse, category]
+  guardrail_only_below_n: 28
+  graduation: {full_stats_n: 28}

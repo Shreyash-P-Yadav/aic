@@ -1,0 +1,61 @@
+# I5 - full fidelity. Free text, inconsistent tagging, agent shorthand, and PII in
+# every one of those fields. Masking happens at silver, BEFORE anything is indexed,
+# so sensitive strings never enter the retrieval store.
+source_id: support_tickets
+system: "Support / CRM ticketing API"
+owner: customer-ops
+transport: api_pull
+format: jsonl
+landing_path: "landing/support_tickets/dt={date}/"
+build_tier: full
+quality_tier: medium
+
+arrival:
+  cron: "*/30 * * * *"
+  tz: Asia/Kolkata
+  jitter_minutes: 5
+  failure_probability: 0.01
+latency_sla_hours: 4
+
+covers:
+  grain: [ticket_id]
+  period: continuous
+
+restatement: {expected: false, window_days: 0, policy: none}
+
+schema:
+  version: 1
+  columns:
+    ticket_id: {type: string, pk: true}
+    opened_at_ts: {type: timestamp}
+    resolved_at_ts: {type: timestamp}
+    category: {type: string, allowed: [availability, damage, delivery, billing, product, other, UNKNOWN]}
+    severity: {type: string, allowed: [p1, p2, p3, p4]}
+    warehouse: {type: string}
+    product_sku: {type: string}
+    region: {type: string}
+    body_text: {type: string, pii: true, description: "Free text; names, emails and phones are masked at silver."}
+    customer_name: {type: string, pii: true}
+    customer_email: {type: string, pii: true}
+    customer_phone: {type: string, pii: true}
+  drift_policy: quarantine_and_alert
+
+watermark: opened_at_ts
+# The ticketing API stamps UTC while every other feed stamps IST. Declared here so
+# silver converts rather than guesses; the ticket_id encodes the IST date it was
+# raised on, which is what verifies the declaration after conversion.
+timestamp_tz: UTC
+idempotency: [batch_id, row_hash]
+
+expectations:
+  row_count_min: 0
+  row_count_max: 5000
+  comparisons:
+    - "resolved_at_ts >= opened_at_ts"
+  max_frac_violating: {untagged_category: 0.15}
+
+reconciliation: []
+
+history_available_months: 24
+known_issues: [free_text, pii_bearing, inconsistent_tagging, agent_shorthand]
+classification: internal_customer_pii

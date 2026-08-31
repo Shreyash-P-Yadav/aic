@@ -1,0 +1,131 @@
+# Tier-1 headline metric. Daily, high-quality source, fiscal Apr-Mar calendar.
+contract_version: "1.2.0"
+
+kpi:
+  id: net_revenue
+  name: "Net Revenue"
+  tier: 1
+  business_owner: "CFO Office"
+  data_steward: "analytics-eng"
+  description: >
+    Recognised product revenue net of returns and discounts, excluding taxes and
+    shipping. Currency INR. Ops definition (order date), which differs from the
+    finance definition by 1-3% on returns timing and shipping treatment.
+
+definition:
+  base_grain: [date, product_sku, region, channel]
+  default_reporting_grain: [date]
+  dimensions: [date, iso_week, product_sku, category, region, channel, customer_segment]
+  calendar: fiscal_apr_mar
+  unit: INR
+  aggregation: sum
+  null_policy: "no sales row = 0 revenue; unknown dim member -> 'UNKNOWN' + DQ flag"
+
+calculation:
+  measure_sql: "SUM(units * unit_price_net) - SUM(returns_value)"
+  source_view: gold.fct_revenue_daily
+  derived_submetrics:
+    asp: "SUM(units * unit_price_net) / NULLIF(SUM(units), 0)"
+    unit_volume: "SUM(units)"
+    margin_pct: "100.0 * (SUM(units * (unit_price_net - unit_cost))) / NULLIF(SUM(units * unit_price_net), 0)"
+    discount_depth: "100.0 * SUM(units * (list_price - unit_price_net)) / NULLIF(SUM(units * list_price), 0)"
+
+sources:
+  - {source_id: oms_orders, role: primary, required: true}
+  - {source_id: pim_products, role: primary, required: false}
+
+lineage:
+  - {step: land, from: oms_orders.order_lines, to: bronze.oms_order_lines, transform: ingest/bronze.py}
+  - {step: land, from: oms_orders.returns, to: bronze.oms_returns, transform: ingest/bronze.py}
+  - {step: conform, from: bronze.oms_order_lines, to: silver.sales_conformed, transform: ingest/silver.py}
+  - {step: mart, from: silver.sales_conformed, to: gold.fct_revenue_daily, transform: ingest/gold.py}
+
+drivers:
+  identity:
+    - {id: asp, role: price}
+    - {id: volume, role: quantity}
+    - {id: mix, role: mix, over: [product_sku, region]}
+  exogenous:
+    - id: fill_rate
+      kpi_ref: order_fill_rate
+      direction: positive
+      lag_days: [0, 7]
+      controllable: true
+      lever: replenishment
+      elasticity_prior: {mean: 0.5, sd: 0.2}
+    - id: marketing_adstock
+      kpi_ref: marketing_spend
+      direction: positive
+      lag_days: [0, 21]
+      adstock_half_life_days: 7
+      controllable: true
+      lever: media_budget
+      elasticity_prior: {mean: 0.15, sd: 0.10}
+    - id: price_index
+      direction: negative
+      lag_days: [0, 3]
+      controllable: true
+      lever: pricing
+      elasticity_prior: {mean: -0.8, sd: 0.3}
+    # The mediator. Every driver above reaches revenue THROUGH unit volume, so this
+    # regressor is excluded whenever one of their total effects is the estimand.
+    - id: unit_volume
+      kpi_ref: unit_volume
+      direction: positive
+      lag_days: [0, 0]
+      mediates: [fill_rate, marketing_adstock, price_index]
+    - {id: holiday_promo_calendar, direction: contextual, lag_days: [-10, 7]}
+    - {id: competitor_price_index, direction: contextual, lag_days: [0, 14], coverage: partial}
+    - {id: weather_index, direction: contextual, lag_days: [0, 3]}
+  feeds: []
+  downstream_of: [order_fill_rate, marketing_spend]
+
+materiality:
+  statistical:
+    method: conformal_ar_innovation
+    alpha: 0.01
+    fdr_q: 0.05
+    shift_persistence_days: 3
+    z_threshold: 3.0
+  business:
+    min_abs_impact_inr: 1000000      # Rs 10 lakh against the counterfactual
+    min_pct_move: 2.0
+  priority_formula: "abs(impact_inr) * tier_weight * persistence_factor"
+
+confidence_policy:
+  min_history_days_full_stats: 28
+  abstain_below: 0.50
+  hedge_below: 0.75
+  evidence_floor: 0.35
+  hard_gates:
+    any_signal_min: 0.30
+    required_sources_fresh: true
+
+access:
+  classification: internal_financial
+  roles:
+    cfo: {rows: all, columns: all}
+    analyst: {rows: all, columns: all}
+    rsm_north:
+      rows: "region = :user_region"
+      columns: {mask: [margin_pct, discount_depth]}
+      national_headline: summary_only
+    marketing_lead:
+      rows: all
+      columns: {mask: [margin_pct]}
+    intern:
+      deny: true
+      reason: "Tier-1 financial KPI - request access from the data steward (analytics-eng)."
+  audit: {log_queries: true, log_narratives: true, retention_days: 365}
+
+actions_ref: catalogs/actions_revenue.yaml
+
+monitoring:
+  freshness_sla_hours: 30
+  drift_checks: {input_psi_monthly: 0.2, coefficient_stability_refit_days: 30}
+
+sparse_history_policy:
+  method: hierarchical_pool
+  pool_by: [category, region]
+  guardrail_only_below_n: 28
+  graduation: {full_stats_n: 28, weekly_seasonality_n: 56}
